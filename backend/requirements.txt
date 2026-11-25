@@ -7,3 +7,8 @@ pydantic>=2
 anthropic
 openai
 chromadb
+numpy
+# 테스트 (python -m pytest -q)
+pytest
+httpx
+reportlab

@@ -3,6 +3,12 @@
 임베딩은 직접 계산해서 넣는다 (Chroma 내장 임베딩 함수 대신). 공급자는 환경변수로 바꾼다.
 EMBED_PROVIDER=openai (기본)  EMBED_MODEL=text-embedding-3-small
 EMBED_PROVIDER=stub           키 없이 테스트 (글자 n-gram 해시)
+
+벡터 저장소는 VECTOR_STORE 환경변수로 고른다.
+VECTOR_STORE=auto (기본)   chromadb를 import할 수 있으면 ChromaDB, 아니면 simple
+VECTOR_STORE=chroma        ChromaDB (data/chroma)
+VECTOR_STORE=simple        numpy 대체 저장소 (data/vectors, app/vectorstore.py)
+  ※ Windows에서 VC++ 재배포 패키지가 없거나 '스마트 앱 컨트롤'이 grpc DLL을 막으면 chromadb import가 실패한다.
 """
 import hashlib
 import math
@@ -10,26 +16,47 @@ import os
 import re
 from collections import defaultdict
 
-import chromadb
-
 from . import store
 
 COLLECTION = "accidents"
 CHUNK = 700
 OVERLAP = 100
 _client = None
+_col = None
+backend_name = ""  # 실제로 쓰는 저장소 (chroma | simple)
 
 
 def _collection():
-    global _client
-    if _client is None:
-        _client = chromadb.PersistentClient(path=str(store.DATA_DIR / "chroma"))
-    return _client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
+    global _client, _col, backend_name
+    if _col is not None:
+        return _col if backend_name == "simple" else _client.get_or_create_collection(
+            COLLECTION, metadata={"hnsw:space": "cosine"})
+    choice = os.getenv("VECTOR_STORE", "auto").lower()
+    if choice in ("auto", "chroma"):
+        try:
+            import chromadb
+
+            _client = chromadb.PersistentClient(path=str(store.DATA_DIR / "chroma"))
+            _col = _client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
+            backend_name = "chroma"
+            return _col
+        except ImportError as e:
+            if choice == "chroma":
+                raise
+            print(f"[search] chromadb를 쓸 수 없어 simple 저장소로 대신함: {e}", flush=True)
+    elif choice != "simple":
+        raise RuntimeError(f"알 수 없는 VECTOR_STORE: {choice}")
+    from .vectorstore import SimpleCollection
+
+    _col = SimpleCollection(store.DATA_DIR / "vectors")
+    backend_name = "simple"
+    return _col
 
 
 def reset_client() -> None:  # 테스트에서 DATA_DIR를 바꿀 때
-    global _client
-    _client = None
+    global _client, _col, backend_name
+    _client = _col = None
+    backend_name = ""
 
 
 # ---------- 임베딩 ----------
