@@ -1,5 +1,10 @@
 """사조위 철도 사고조사보고서 PDF -> 쪽 번호가 붙은 텍스트 + 목차 기준 섹션.
 
+PDF 읽기는 레이아웃 파서(저장소의 parser/, app/layout_parser.py)가 맡는다. 이 파일은
+1) 텍스트 레이어가 없는 PDF를 미리 걸러내고 (OCR 필요)
+2) 레이아웃 파서를 부르고
+3) 제목 트리에서 못 찾은 섹션만 정규식(split_sections)으로 채운다.
+
 보고서 목차는 대체로 표준화돼 있다:
   개요 -> 1. 사실정보 -> 2. 분석 -> 3. 결론 (3.1 조사결과, 3.2 사고원인) -> 4. 안전권고
 목차 페이지에도 같은 제목이 나오므로, 같은 제목이 여러 번 나오면 마지막(본문) 위치를 쓴다.
@@ -7,11 +12,6 @@
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-
-import pdfplumber
-
-# HWP에서 변환된 PDF는 글자 간격이 들쭉날쭉해서 기본값(3)이면 숫자·괄호가 떨어져 나온다.
-X_TOLERANCE = 1.5
 
 SECTION_PATTERNS = {
     "facts": r"^\s*1\s*\.\s*사\s*실\s*정\s*보",
@@ -40,76 +40,6 @@ class ParsedReport:
     @property
     def full_text(self) -> str:
         return "\n".join(self.pages)
-
-
-def _clean(text: str) -> str:
-    text = re.sub(r"[ \t]+", " ", text)
-    # "( 3 )" -> "(3)", "제 12 조" -> "제12조"
-    text = re.sub(r"\(\s+", "(", text)
-    text = re.sub(r"\s+\)", ")", text)
-    text = re.sub(r"제\s+(\d+)\s*조", r"제\1조", text)
-    return text.strip()
-
-
-# 쪽 아래 가운데의 숫자만 있는 줄은 쪽번호로 보고 뺀다 (약관 파서 pdf_lines.mark_page 규칙과 같은 생각).
-# "- 12 -" 같은 모양도 포함.
-PAGE_NUMBER_RE = re.compile(r"^[-–\s]*\d{1,3}[-–\s]*$")
-PAGE_NUMBER_CENTER_TOL = 40  # pt
-MAX_OBJS_FOR_TABLES = 3000
-
-
-def _table_md(rows: list[list]) -> str:
-    rows = [[re.sub(r"\s+", " ", c or "").strip() for c in r] for r in rows if any((c or "").strip() for c in r)]
-    if not rows:
-        return ""
-    n = max(len(r) for r in rows)
-    rows = [r + [""] * (n - len(r)) for r in rows]
-    lines = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * n]
-    lines += ["| " + " | ".join(r) + " |" for r in rows[1:]]
-    return "\n".join(lines)
-
-
-def _drop_page_number(page, body) -> str:
-    words = body.extract_words(x_tolerance=X_TOLERANCE)
-    if not words:
-        return ""
-    bottom = max(w["bottom"] for w in words)
-    last = [w for w in words if abs(w["bottom"] - bottom) < 2]
-    text = " ".join(w["text"] for w in last)
-    cx = (min(w["x0"] for w in last) + max(w["x1"] for w in last)) / 2
-    if PAGE_NUMBER_RE.match(text) and abs(cx - page.width / 2) <= PAGE_NUMBER_CENTER_TOL:
-        body = body.crop((0, 0, page.width, min(w["top"] for w in last) - 0.5))
-    return body.extract_text(x_tolerance=X_TOLERANCE) or ""
-
-
-def extract_pages(pdf_path: str | Path) -> list[str]:
-    """PDF -> 쪽별 텍스트 목록. 각 원소는 "[p.N]\\n본문" 형식이어야 한다.
-
-    표는 본문에서 빼서 Markdown 표로 쪽 끝에 붙인다 (본문에 표 글자가 섞이면 문장이 깨진다).
-    ※ 약관 파서(pdfplumber-body-table-parser)의 표 추출로 바꿔 끼우려면 이 함수만 고치면 된다.
-    """
-    pages = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for i, page in enumerate(pdf.pages, start=1):
-            # 글자를 도형으로 그린 쪽(텍스트 레이어 없음)이나 도면 쪽은 선이 수만 개라 표 감지가 멈춘다 -> 건너뜀
-            n_objs = len(page.lines) + len(page.rects) + len(page.curves)
-            tables = [t for t in page.find_tables() if len(t.rows) >= 2] if n_objs <= MAX_OBJS_FOR_TABLES else []
-            bboxes = [t.bbox for t in tables]
-
-            def outside_tables(obj, bboxes=bboxes):
-                if obj.get("object_type") != "char":
-                    return True
-                cx, cy = (obj["x0"] + obj["x1"]) / 2, (obj["top"] + obj["bottom"]) / 2
-                return not any(x0 <= cx <= x1 and top <= cy <= bottom for x0, top, x1, bottom in bboxes)
-
-            body = page.filter(outside_tables) if bboxes else page
-            text = _clean(_drop_page_number(page, body))
-            for k, t in enumerate(tables, start=1):
-                md = _table_md(t.extract(x_tolerance=X_TOLERANCE))
-                if md:
-                    text += f"\n\n[표 p.{i}-{k}]\n{md}"
-            pages.append(f"[p.{i}]\n{text}")
-    return pages
 
 
 def split_sections(pages: list[str]) -> dict[str, str]:
@@ -150,8 +80,8 @@ def _is_child(candidate: str, parent: str) -> bool:
 
 
 def quick_text_check(pdf_path: str | Path, sample: int = 6) -> None:
-    """pdfplumber로 읽기 전에 텍스트 레이어가 있는지 빠르게 본다.
-    글자를 도형으로 그린 PDF는 pdfplumber가 쪽마다 선 수만 개를 해석하느라 몇 분씩 걸리기 때문."""
+    """파서를 돌리기 전에 텍스트 레이어가 있는지 빠르게 본다.
+    글자를 도형으로 그린 PDF는 파서(pdfplumber)가 쪽마다 선 수만 개를 해석하느라 몇 분씩 걸리기 때문."""
     import pypdfium2 as pdfium
 
     doc = pdfium.PdfDocument(str(pdf_path))
@@ -170,9 +100,15 @@ def quick_text_check(pdf_path: str | Path, sample: int = 6) -> None:
 
 
 def parse_report(pdf_path: str | Path) -> ParsedReport:
+    """텍스트 레이어 확인 -> 레이아웃 파서 (쪽별 글자 + 제목 트리 섹션) -> 트리가 못 찾은 섹션은 정규식으로.
+    레이아웃 파서가 실패하면 LayoutParserError (처리 상태 error + 이유)."""
+    from .layout_parser import parse_with_layout
+
+    pdf_path = Path(pdf_path).resolve()
     quick_text_check(pdf_path)
-    pages = extract_pages(pdf_path)
+    pages, tree_sections = parse_with_layout(pdf_path)
+    sections = {**split_sections(pages), **tree_sections}
     chars = sum(len(re.sub(r"\s|\[p\.\d+\]", "", p)) for p in pages)
     if chars / max(1, len(pages)) < MIN_CHARS_PER_PAGE:
         raise NeedsOCR(f"텍스트 레이어 없음 (쪽당 {chars // max(1, len(pages))}자)")
-    return ParsedReport(pages=pages, sections=split_sections(pages))
+    return ParsedReport(pages=pages, sections=sections)

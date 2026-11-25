@@ -1,0 +1,4 @@
+# 파서 입출력 폴더 (이 파일이 있는 parser/ 폴더 기준). 환경 변수 PARSE_DATA_DIR, PARSE_OUT_DIR, PARSE_DOCS_DIR가 있으면 그쪽이 우선
+# (백엔드는 보고서마다 환경 변수로 따로 지정해서 부른다: backend/app/layout_parser.py)
+data_dir: ../../data   # 원본 PDF (korail_accidents/data)
+out_dir: ../parsed     # 일괄 파싱 결과 (secure/<doc_id>/, results/<doc_id>/)

@@ -1,0 +1,74 @@
+# 보고서 프로필: 장·절 번호 (Ⅰ. / 1. / 1.1 / 1.1.1 …)로 짜인 보고서 (조사보고서·연구보고서 등).
+# 맞춘 문서: 항공·철도사고조사위원회 철도사고 조사보고서 (2006~2026, 한글 문서 편집기에서 내보낸 PDF).
+# 조문형 (제N조) 약관용 default 프로필과 달리 제목을 폰트가 아니라 번호 모양과 번호 흐름으로 찾는다 (parsing/tree.py 보고서 모드).
+# 새 PDF가 보고서 모양이면 (줄 맨 앞 "1.2 …"·"Ⅱ. …"가 많고 "제N조"가 적음) parsing/profile_draft.py가 이 프로필을 고른다.
+
+mode: report
+
+# 본문 폰트는 문서마다 다르다 (unknown/12, 한양신명조/12, H2mjsM/13.9 …): auto = 문서 설정의 body_font (새 문서를 만들 때
+# 폰트 분포에서 채움). 나머지 역할은 보고서 모드에서 쓰지 않는다.
+fonts:
+  body: auto
+  article_title: UNSET/0
+  gwan_title: UNSET/0
+  pyeon_title: UNSET/0
+  section_title: UNSET/0
+  title_band: [UNSET/0]
+  small: UNSET/0
+  form_code: UNSET/0
+bold_font_prefixes: []
+
+# 공백 글자가 없는 PDF: 같은 줄 이웃 글자 간격이 글자 크기 × 이 값보다 넓으면 띄어쓰기 (parsing/pdf_lines.py)
+space_gap_ratio: 0.2
+
+# 글자 층의 잘못된 글자 바꾸기 (parsing/pdf_lines.py): 『와 』가 모두 U+F000으로 들어간 PDF → 읽기 순서로 번갈아
+char_map:
+  "\uf000": ["『", "』"]
+
+# 줄바꿈 잇기: 글자 단위로 줄을 나눈 문서라 단어 중간 줄바꿈은 붙이고 단어 경계만 띄운다 (parsing/textjoin.py)
+smart_line_join: true
+
+# 줄 안 위첨자 각주 번호 ("열차2)")를 줄 글자에서 빼고 각주를 그 번호가 나온 노드에 붙인다
+superscript_refs: true
+
+# 그림·표 설명 줄: 표 설명은 표 title·caption으로, 그림 설명은 caption 노드로 (그림 안에 있어도 제외하지 않음)
+# 닫는 괄호 뒤는 공백·줄 끝만 ("[표27]과 같이 …"처럼 조사가 붙은 본문 문장은 설명이 아님)
+caption_patterns:
+  - '^[\[［〔<]\s*(그림|표|사진|도표)\s*[\d\-.]+\s*[\]］〕>](?=\s|$)'
+  - '^(그림|표|사진)\s*\d+(?:-\d+)?\.\s+\S'
+
+# 쪽 위 머리글 (예: "사실정보 한국철도공사 경원선 …"): 쪽 위 exclude.header_top_ratio 안에서 본문보다 작은 글씨이고
+# 본문 크기 줄보다 위에 있는 줄을 제외 (parsing/exclude.py)
+running_header: true
+
+# 자동 구역 (parsing/auto_zones.py): report = 표지 (1쪽), 목차 쪽 (점선 줄), 첫 장 제목 앞 쪽을 빼고 나머지는 본문
+auto_zones: report
+
+# 보고서 모드 제목 (parsing/tree.py)
+report:
+  # 번호 없는 제목 (줄 전체가 이 글자일 때, 공백 무시)
+  unnumbered_headings: [개요, 요약, 제목, 부록, 참고문헌, 참고자료, 붙임, 첨부]
+  heading_max_chars: 60        # 제목 줄 최대 글자 수 (넘으면 번호로 시작해도 본문)
+  toc_leader: "[·.…‥ㆍ･]{4,}"  # 목차 점선 (이 줄은 제목·본문으로 쓰지 않는다)
+
+# 이 프로필 문서에 쓰는 임계값 (config/params.yaml 위에, 문서 설정 params 아래)
+params:
+  exclude:
+    image_keep_body_text: true  # 그림과 겹친 본문 문장은 남기고 그림 안 작은 이름표만 뺌
+    image_max_page_ratio: 0.5
+  table_extract:
+    normalize_spaces: true
+    merge_single_col_rows: true
+    join_split_rows: true  # 쪽 넓이 절반보다 큰 이미지 (잘라 보이는 배경·그림, bbox가 쪽보다 큼)는 제외 영역으로 쓰지 않음
+
+# 아래는 보고서에 쓰지 않지만 다른 단계가 읽는 항목 (default 프로필과 같음)
+box_labels: {box_desc: 설명, box_caution: 유의사항, box_terms: 용어해설, box_example: 예시}
+box_kinds_not_table: [box_desc, box_caution, box_terms]
+box_label_fills: []
+box_label_fill_tol: 0.02
+example: {open: "<〈", close: ">〉", keyword: 예시, keep_in_box_kinds: [box_desc]}
+form_code_regex: '(?!x)x'      # 양식 코드 없음
+references:
+  other_contract_words: [주계약, 보통약관, 기본계약]
+  contract_name_suffixes: [약관, 특약, 계약]
+  law_suffixes: [법, 법률, 시행령, 시행규칙, 령, 규칙, 규정, 고시]

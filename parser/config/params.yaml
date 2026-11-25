@@ -1,0 +1,89 @@
+# 이름 붙은 임계값. 단위: pt = PDF 포인트, ratio = 0~1 비율. 값마다 정한 근거를 적는다.
+# 근거의 "샘플"은 규칙 조정용 45쪽, "와이어프레임 확인"은 review/wireframe/에서 직접 본 사례.
+
+page_number:
+  center_tol_pt: 3.0          # 쪽번호 줄 가운데와 쪽 가운데의 거리 허용. 샘플 45쪽 모두 +1.7pt 어긋남 → 여유를 둔 값
+
+phantom_region:               # 가짜 영역 (채움 사각형이 만든 영역) 제거
+  inside_tol_pt: 1.0          # 다른 영역 안에 있다고 볼 때 허용 오차 (pdfplumber 좌표 반올림 수준)
+  edge_touch_tol_pt: 1.5      # 영역 경계에 닿는 그리기 객체로 볼 거리 (선 굵기 0.25~1pt 고려)
+
+exclude:
+  header_top_ratio: 0.15      # 양식 코드 줄을 찾는 쪽 위 범위 (쪽 높이 비율). 코드 줄은 샘플에서 쪽 위 10% 안
+  raster_min_side_pt: 5.0     # 래스터 이미지로 제외할 최소 변 길이. 그보다 얇은 이미지는 선 조각으로 쓰임
+  line_excluded_ratio: 0.5    # 줄 글자 중 이 비율 이상이 제외 영역이면 그 줄을 excluded로 표시
+  arrow_codepoints: [0x2190, 0x21FF]  # broken 판정용 화살표 문자 범위 (3주차 p99 도식의 U+2191 등)
+  image_keep_body_text: false  # true면 이미지 안이라도 본문 크기 글자는 제외하지 않음 (보고서 프로필 true)
+  image_max_page_ratio: null  # 쪽 넓이의 이 비율보다 큰 이미지는 제외 영역으로 쓰지 않음 (null = 모든 이미지 사용. 보고서 프로필 0.5)
+
+geometry:                     # 작은 기하 허용 오차 (선·사각형 좌표 반올림과 선 굵기 수준)
+  thin_object_max_pt: 2.5     # 이 폭 이하인 선·사각형은 세로 구분 객체로 본다 (1week-rag thin_rect_max_width와 같은 감각)
+  touch_tol_pt: 1.0           # 객체가 영역에 닿는다고 볼 거리
+  inner_margin_pt: 3.0        # 영역 좌우 끝에서 이만큼 떨어져야 "안쪽" 선
+  left_edge_tol_pt: 2.0       # 채움 사각형이 영역 왼쪽 끝에서 시작한다고 볼 거리
+  char_center_tol_pt: 1.0     # 글자 중심이 영역 안인지 볼 때 허용 오차
+
+box_columns:                  # 박스 안 라벨 열 / 내용 열 나누기 (parsing/boxes.py)
+  sep_cover_ratio: 0.8        # 세로 구분 객체가 박스 높이를 덮는 비율. 샘플 라벨 박스는 0.82~0.97
+  sep_max_x_ratio: 0.4        # 구분선 위치가 박스 왼쪽에서 이 비율 안. 라벨 열 폭은 박스의 9~17%
+  label_fill_cover_ratio: 0.9 # 라벨 열 채움 사각형이 박스 높이를 덮는 비율. 샘플 0.97~1.0
+  sep_fill_tol_pt: 3.0        # 채움 사각형 오른쪽 끝과 구분선 x의 거리 허용
+  continue_fill_tol: 0.005    # 쪽 넘김 이어짐: 앞 쪽 박스와 라벨 열 채움 색이 같다고 볼 차이. 설명 박스 (0.82,0.9,0.97)와 라벨+내용 표 (0.81,0.91,0.97)를 가름
+  gap_min_pt: 8.0             # x 간격으로 나눌 때 최소 빈 띠 폭 (이 문서에서는 gap 방식이 쓰인 박스 1개)
+  gap_max_x_ratio: 0.3        # 빈 띠가 시작해야 하는 박스 왼쪽 범위
+  gap_left_bold_ratio: 0.5    # 빈 띠 왼쪽 글자 중 굵은 글자 비율 (라벨로 볼 조건)
+  example_bold_ratio: 0.5     # 예시 시작 줄의 굵은 글자 비율 초과 조건. 샘플 예시 줄 10개 모두 굵게
+
+tables:                       # 표 영역 확정과 선 모양 (parsing/tables_classify.py)
+  excluded_overlap_ratio: 0.5 # image·broken·example_box가 표 면적의 이 비율 이상을 덮으면 표로 다루지 않음
+  h_line_min_width_ratio: 0.5 # 가로선으로 셀 때 표 폭을 덮는 최소 비율
+  v_line_min_height_ratio: 0.3  # 세로선으로 셀 때 표 높이를 덮는 최소 비율
+  line_cluster_tol_pt: 2.0    # 같은 위치의 선으로 묶는 거리
+  row_tol_pt: 3.0             # 같은 글자 행으로 묶는 top 차이
+  ruled_gaps_min: 2           # (a) 판정: 행 사이 가로선 수 ≥ min(이 값, 행 수 - 1). 여러 줄 칸 격자표 (T057_1) 기준
+  geo_table_min_rows: 2       # ③ 선 모양 규칙으로 표가 되려면 필요한 글자 행 수. 1행 상자 (별표N 등)는 표 아님
+  grid_rows_for_grid_shape: 3 # 격자 검사 통과 + pdfplumber 격자 행이 이 이상이면 선 폭과 상관없이 (a). 칸마다 배경 사각형을 깔고
+                              # 흰 틈으로 나눈 표는 칸 경계선이 칸 하나 폭뿐이라 (b)로 잘못 감 (T296_0 등). 장해분류표는 격자 2행이라 (b) 유지
+  label_col_content_margin_pt: 5.0  # 라벨 열이 있는 표에서 줄 오른쪽 끝이 구분선보다 이만큼 넘어야 내용 열 줄
+  header_fill_top_tol_pt: 3.0 # 머리 행 채움 사각형이 표 위쪽에서 시작한다고 볼 거리
+  header_fill_min_width_ratio: 0.6
+  header_fill_max_height_ratio: 0.4
+  lines_in_tol_pt: 1.0        # 줄 중심이 표 안에 있다고 볼 허용 오차
+
+table_extract:                # 표 추출 (parsing/tables_extract.py)
+  label_gap_pt: 6.0           # (d) 라벨 열에서 같은 라벨로 묶을 줄 세로 간격 (줄 간격 약 4pt + 여유)
+  label_rows_min: 3          # (d) 행 사이 가로선 없이 한 구간에 라벨 줄이 이만큼 이상이고 모두 같은 높이에 내용 줄이 있으면 줄마다 한 행
+  label_row_align_pt: 2.0     #     라벨 줄과 내용 줄을 같은 높이로 보는 줄 가운데 차이
+  note_gap_pt: 15.0           # 표 아래 주석 블록의 첫 줄이 표 아래 끝에서 떨어질 수 있는 거리
+  note_cont_gap_pt: 5.0       # 주석 줄 다음에 이어지는 줄로 볼 세로 간격 (줄 간격 수준)
+  title_gap_pt: 15.0          # 표 제목으로 볼 표 위 거리 (지시값 약 15pt)
+  intro_gap_pt: 30.0          # 도입 줄로 볼 표 위 거리
+  caption_gap_pt: 30.0         # 표 설명 줄 ("[표1] …")을 찾는 표 위·아래 거리 (프로필 caption_patterns가 있을 때)
+  normalize_spaces: false      # 칸 글자 공백 정리 (보고서 프로필 true)
+  merge_single_col_rows: false # 1열 표 (상자 도식)에서 글머리표·번호로 시작하지 않는 행을 위 행에 잇기 (보고서 프로필 true)
+  join_split_rows: false       # 쪽 경계에서 잘린 행 (다음 쪽 첫 행 첫 칸이 빔)을 앞 행에 잇기 (보고서 프로필 true)
+  col_match_tol_pt: 3.0       # 쪽 넘김 이어 붙이기: 열 경계 위치 차이 허용
+  empty_ratio_low: 0.5        # 빈 칸 비율이 이보다 크면 확신 낮음
+  sliver_max_pt: 8.0          # (a) 격자에서 이보다 좁고 모든 칸이 빈 열·행은 이중 테두리 틈새로 보고 지움 (T097_0 틈새 약 5pt)
+  numeric_col_ratio: 0.6      # 칸의 이 비율 이상이 숫자면 숫자 열로 본다
+  edge_strip_pt: 1.0          # 채움 사각형 테두리가 보이는 선인지 볼 때 양옆으로 살피는 폭 (칸 사이 흰 틈보다 넓게)
+  edge_samples: 3             # 선분 길이를 따라 색을 살피는 점 수
+
+zone_candidates:              # 구역 자동 후보 (parsing/zones.py, 두 번째 문서에서 필요하면 다시 씀)
+  divider_max_chars: 300      # 간지 후보: 글자 수 상한
+  divider_big_font_pt: 18     # 간지 후보: 이 크기 이상 줄
+  disability_small_share: 0.5 # 장해분류표 후보: small 폰트 글자 비율
+
+
+box_blocks:                   # 3단계 박스 블록 (parsing/box_blocks.py)
+  long_definition_chars: 300  # 용어 정의가 이보다 길면 확인 필요로 표시 (중앙값 59자, 용어 두 개가 붙은 경우를 찾기 위함)
+
+tree:                         # 4단계 본문 트리 (parsing/tree.py)
+  title_cont_gap_ratio: 1.0   # 제목 줄 바로 다음 같은 폰트 패턴 없는 줄을 제목 둘째 줄로 볼 세로 간격 (앞 줄 높이 배수)
+  item_align_tol_pt: 4.0      # 번호 줄이 앞 형제 항목과 같은 목록이라고 볼 x0 차이. ⑤ 등 원문자 글리프 폭 차로 3pt 어긋남 (p140)
+  sentence_end_chars: [".", ":", ";"]  # 번호 줄 앞 줄이 이것으로 끝나면 줄바꿈 조각이 아니라 새 항목 (줄바꿈 조각의 앞 줄은 문장 중간)
+  section_label_max_chars: 6  # 절 제목 왼쪽 상자 라벨 (별표2, 별표 등) 최대 글자 수
+  section_label_row_ratio: 1.0  # 라벨과 절 제목이 같은 행이라고 볼 세로 중심 차 (제목 높이 배수)
+  item_consecutive_tol_pt: 12.0  # 번호가 바로 이어지고 앞 줄이 문장 끝이면 형제로 볼 x0 차이 (주석 안 목록처럼 들여쓰기가 조금 다른 경우)
+  report_heading_gap_ratio: 1.5  # 보고서 모드: 번호 제목 줄 위 세로 간격 하한 (줄 높이 배수). 철도사고 보고서: 제목·문단 앞 약 2.6, 줄바꿈 약 0.8
+  report_wide_line_tol_pt: 20.0  # 보고서 모드: 줄 끝 (x1)이 본문 오른쪽 끝 - 이 값보다 오른쪽이면 줄바꿈된 문단 첫 줄 (제목 아님)

@@ -1,0 +1,6 @@
+# Week 4 terms parsing (Python 3.12). The week 1 table parser is vendored in vendor/policy_rag.
+pdfplumber==0.11.10
+pdfminer.six==20260107
+pypdfium2==5.13.0
+Pillow==12.3.0
+PyYAML==6.0.3
