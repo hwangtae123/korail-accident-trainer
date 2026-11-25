@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from . import auth
 from . import briefing as briefing_mod
 from . import search, store, watch
 from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Query, RelatedGroup,
@@ -46,7 +47,10 @@ app.add_middleware(
     allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX") or None,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,  # 로그인 쿠키
 )
+app.middleware("http")(auth.guard)  # ACCESS_PASSWORD가 있으면 로그인한 요청만 /api 통과
+app.include_router(auth.router)
 
 
 @app.exception_handler(LLMError)

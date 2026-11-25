@@ -327,3 +327,24 @@ a.report-card:hover { border-color: var(--sky-400); background: #fff; }
 .step-fig figcaption { font-size: 12px; line-height: 1.45; padding: 8px 10px; color: var(--sub); }
 @media (max-width: 760px) { .step-body.with-fig { grid-template-columns: 1fr; } }
 @media print { .fig-grid, .step-fig { display: none; } }
+
+/* ================= 로그인 ================= */
+.login {
+  position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden;
+  background:
+    radial-gradient(1000px 420px at 50% 110%, rgba(79,168,255,.5), transparent 60%),
+    linear-gradient(180deg, var(--navy-800) 0%, var(--navy-700) 45%, var(--blue-600) 100%);
+}
+.login-card {
+  position: relative; width: 100%; max-width: 360px; background: #fff; color: var(--ink); border-radius: 16px;
+  padding: 28px 24px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 60px rgba(6,26,64,.35);
+}
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.login-brand svg rect { fill: var(--navy-800); fill-opacity: 1; }
+.login-brand div { display: flex; flex-direction: column; line-height: 1.25; }
+.login-brand b { font-size: 18px; color: var(--navy-800); }
+.login-brand small { font-size: 12px; color: var(--sub); }
+.login-card label { font-size: 13px; font-weight: 600; }
+.login-card .input { height: 44px; font-size: 16px; }
+.login-card .btn.primary { height: 44px; font-size: 15px; font-weight: 700; margin-top: 4px; }
+.login-err { margin: 0; color: var(--bad); font-size: 13px; }

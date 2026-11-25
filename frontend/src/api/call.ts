@@ -27,6 +27,8 @@ export async function call<T>(p: Promise<Fetched<T>>): Promise<Result<T>> {
   try {
     const { data, error, response } = await p;
     if (response.ok) return { ok: true, data: data as T, status: response.status };
+    // 로그인이 풀렸으면(쿠키 만료·비밀번호 변경) 로그인 화면으로 (views/Login.tsx)
+    if (response.status === 401) window.dispatchEvent(new Event("auth:required"));
     // 우리 백엔드(FastAPI)는 오류도 JSON으로 준다. JSON이 아니면(정적 호스팅의 404 등) 백엔드 주소가 설정되지 않은 것이다 (예: Vercel에 화면만 배포)
     if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
       return { ok: false, status: 0, message: NO_BACKEND };

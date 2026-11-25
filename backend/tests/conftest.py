@@ -9,3 +9,4 @@ os.environ["VECTOR_STORE"] = "simple"
 os.environ.setdefault("LLM_PROVIDER", "stub")
 os.environ.setdefault("EMBED_PROVIDER", "stub")
 os.environ["LLM_FALLBACK_PROVIDER"] = "none"  # .env에 GEMINI_API_KEY가 있어도 테스트가 실제 Gemini를 부르지 않게
+os.environ["ACCESS_PASSWORD"] = ""  # .env에 비밀번호가 있어도 테스트는 잠금 없이 (잠금 시험은 test_auth.py)
