@@ -23,7 +23,25 @@ def set_stub(fn: Callable[[str, str], str] | None) -> None:
     _stub = fn
 
 
+class LLMError(RuntimeError):
+    """LLM 호출 실패 (키 없음, 네트워크, 모델 이름 오류, 출력 형식 오류 등). API는 502 + 이유로 돌려준다."""
+
+
 def _complete(system: str, user: str) -> str:
+    if _stub is not None or os.getenv("LLM_PROVIDER", "anthropic").lower() == "stub":
+        return _call_provider(system, user)  # 테스트용 가짜 LLM의 예외는 그대로 둔다
+    try:
+        return _call_provider(system, user)
+    except LLMError:
+        raise
+    except Exception as e:
+        msg = f"{type(e).__name__}: {str(e)[:300]}"
+        if any(k in msg.lower() for k in ("api_key", "authentication", "auth", "401")):
+            msg += " — backend/.env의 API 키를 확인하세요"
+        raise LLMError(msg) from e
+
+
+def _call_provider(system: str, user: str) -> str:
     provider = os.getenv("LLM_PROVIDER", "anthropic").lower()
     if provider == "stub" or _stub is not None:
         if _stub is None:
@@ -84,4 +102,4 @@ def complete_json(system: str, user: str, model_cls: Type[T], retries: int = 1) 
         except (ValueError, ValidationError) as e:
             last_err = e
             prompt = f"{user}\n\n[이전 출력이 형식 검증에 실패했습니다: {str(e)[:800]}]\n형식을 고쳐서 다시 출력하세요."
-    raise RuntimeError(f"LLM 출력 검증 실패: {last_err}")
+    raise LLMError(f"LLM 출력 검증 실패: {last_err}")

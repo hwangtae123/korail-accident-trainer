@@ -10,13 +10,14 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from . import briefing as briefing_mod
 from . import search, store, watch
 from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Query, RelatedGroup,
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
                          UploadResult)
+from .llm import LLMError
 from .pipeline import ingest_bytes, mark_interrupted, process
 from .rule_aliases import canonical_key
 from .schema import Scenario
@@ -41,6 +42,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(LLMError)
+async def llm_failed(_request, e: LLMError):
+    """요약·브리핑처럼 바로 LLM을 부르는 API가 실패하면 502와 이유를 돌려준다 (화면에 그대로 보여 줌)."""
+    return JSONResponse(status_code=502, content={"detail": f"LLM 호출 실패 — {e}"})
 
 
 def _need(rid: str, name: str):

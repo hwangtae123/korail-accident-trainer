@@ -208,3 +208,21 @@ def test_shared_rules_with_different_spelling():
     assert rel[0]["shared_rules"] == [names["B"]]  # 이번 보고서의 표기로 보여준다
     stats = client.get("/api/stats").json()
     assert len(stats["violated_rules"]) == 1 and stats["violated_rules"][0]["count"] == 2
+
+
+# ---------- LLM 실패는 502 + 이유 ----------
+
+def test_llm_failure_returns_502_with_reason(monkeypatch):
+    from app import llm
+
+    client = _client(fake_llm)
+    _upload(client, "A")
+    llm.set_stub(None)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    try:
+        res = client.post("/api/ask", json={"q": "테스트 직접 원인"})
+    finally:
+        llm.set_stub(fake_llm)
+    assert res.status_code == 502
+    assert "LLM 호출 실패" in res.json()["detail"] and "LLM_MODEL" in res.json()["detail"]
