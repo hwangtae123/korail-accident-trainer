@@ -43,6 +43,7 @@ class SimpleCollection:
         self.documents: list[str] = []
         self.metadatas: list[dict] = []
         self.emb = np.zeros((0, 0), dtype=np.float32)
+        self._stamp = None
         self._load()
 
     # ---------- 저장 ----------
@@ -50,8 +51,21 @@ class SimpleCollection:
     def _files(self) -> tuple[Path, Path]:
         return self.path / "items.json", self.path / "embeddings.npy"
 
+    def _file_stamp(self):
+        meta_p, emb_p = self._files()
+        try:
+            return (meta_p.stat().st_mtime_ns, emb_p.stat().st_mtime_ns)
+        except FileNotFoundError:
+            return None
+
+    def _refresh(self) -> None:
+        """다른 프로세스(scripts/ingest.py 등)가 파일을 바꿨으면 다시 읽는다."""
+        if self._file_stamp() != self._stamp:
+            self._load()
+
     def _load(self) -> None:
         meta_p, emb_p = self._files()
+        self._stamp = self._file_stamp()
         if not meta_p.exists() or not emb_p.exists():
             return
         data = json.loads(meta_p.read_text(encoding="utf-8"))
@@ -71,11 +85,14 @@ class SimpleCollection:
         np.save(tmp_emb, self.emb)
         os.replace(tmp_emb, emb_p)
         os.replace(tmp_meta, meta_p)
+        self._stamp = self._file_stamp()
 
     # ---------- Chroma Collection과 같은 모양 ----------
 
     def count(self) -> int:
-        return len(self.ids)
+        with self._lock:
+            self._refresh()
+            return len(self.ids)
 
     def add(self, ids: list[str], documents: list[str], embeddings: list[list[float]], metadatas: list[dict]) -> None:
         new = np.asarray(embeddings, dtype=np.float32)
@@ -84,6 +101,7 @@ class SimpleCollection:
         norms = np.linalg.norm(new, axis=1, keepdims=True)
         new = new / np.where(norms == 0, 1, norms)
         with self._lock:
+            self._refresh()
             if self.count() and self.emb.shape[1] != new.shape[1]:
                 raise RuntimeError(
                     f"임베딩 차원이 다릅니다 (저장 {self.emb.shape[1]}, 새 {new.shape[1]}). "
@@ -98,6 +116,7 @@ class SimpleCollection:
 
     def delete(self, where: dict | None = None, ids: list[str] | None = None) -> None:
         with self._lock:
+            self._refresh()
             drop = set(ids or [])
             keep = [i for i, (x, m) in enumerate(zip(self.ids, self.metadatas))
                     if not (x in drop or (where is not None and _match(m, where)))]
@@ -114,6 +133,7 @@ class SimpleCollection:
     def query(self, query_embeddings: list[list[float]], n_results: int = 10, where: dict | None = None) -> dict:
         out = {"ids": [], "documents": [], "metadatas": [], "distances": []}
         with self._lock:
+            self._refresh()
             cand = [i for i, m in enumerate(self.metadatas) if _match(m, where)]
             mat = self.emb[cand] if cand else None
             for q in query_embeddings:

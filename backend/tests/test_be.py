@@ -226,3 +226,18 @@ def test_llm_failure_returns_502_with_reason(monkeypatch):
         llm.set_stub(fake_llm)
     assert res.status_code == 502
     assert "LLM 호출 실패" in res.json()["detail"] and "LLM_MODEL" in res.json()["detail"]
+
+
+# ---------- simple 벡터 저장소: 다른 프로세스가 쓴 내용을 다시 읽는다 ----------
+
+def test_simple_store_sees_other_writer(tmp_path):
+    from app.vectorstore import SimpleCollection
+
+    server = SimpleCollection(tmp_path / "v")  # 서버 프로세스가 들고 있는 것
+    ingest = SimpleCollection(tmp_path / "v")  # scripts/ingest.py가 따로 연 것
+    server.add(["a:0"], ["가"], [[1.0, 0.0]], [{"report_id": "a"}])
+    ingest.add(["b:0"], ["나"], [[0.0, 1.0]], [{"report_id": "b"}])
+    assert ingest.count() == 2  # 서버가 쓴 a를 지우지 않았다
+    assert server.count() == 2  # 서버도 ingest가 쓴 b를 본다
+    server.add(["c:0"], ["다"], [[1.0, 1.0]], [{"report_id": "c"}])
+    assert {m["report_id"] for m in SimpleCollection(tmp_path / "v").metadatas} == {"a", "b", "c"}
