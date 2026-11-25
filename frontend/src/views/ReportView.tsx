@@ -62,7 +62,7 @@ export default function ReportView({ id, tab, onChanged }: {
         ? <InfoTab id={id} record={record} />
         : <div className="card"><div className="empty">{busy ? "구조화가 끝나면 사고 정보가 나타납니다." : "사고 정보가 없습니다."}</div></div>)}
       {tab === "train" && (
-        <TrainingTab id={id} reportState={status.state}
+        <TrainingTab id={id} reportState={status.state} hasRecord={!!record}
           onRegenerated={() => { void reload(true); onChanged(); }} />
       )}
       {tab === "edit" && <ScenarioEditor id={id} />}

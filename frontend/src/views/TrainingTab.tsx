@@ -5,9 +5,10 @@ import { call, useLoad } from "../api/call";
 import { Empty, ErrorBox, Loaded, LlmNotice, PageLink, Verified } from "../components/common";
 import { go, href } from "../route";
 
-export default function TrainingTab({ id, reportState, onRegenerated }: {
+export default function TrainingTab({ id, reportState, hasRecord, onRegenerated }: {
   id: string;
   reportState: ReportStatus["state"];
+  hasRecord: boolean;
   onRegenerated: () => void;
 }) {
   const busy = BUSY_STATES.includes(reportState);
@@ -38,8 +39,8 @@ export default function TrainingTab({ id, reportState, onRegenerated }: {
     return (
       <div className="card">
         <Empty>
-          {reportState === "done" ? "시나리오가 없습니다." : "보고서 처리가 끝나지 않아 시나리오가 없습니다."}
-          {reportState !== "ocr_needed" && reportState !== "queued" && (
+          {reportState === "done" ? "시나리오가 없습니다." : hasRecord ? "시나리오를 만들지 못했습니다." : "사고 정보 구조화가 끝나지 않아 시나리오가 없습니다."}
+          {hasRecord && (
             <div className="mt"><button className="btn" onClick={() => void regenerate()}>시나리오 생성</button></div>
           )}
         </Empty>
