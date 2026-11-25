@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, BUSY_STATES, type ReportStatus, type Scenario } from "../api/client";
 import { call, useLoad } from "../api/call";
 import { Empty, ErrorBox, Loaded, LlmNotice, PageLink, Verified } from "../components/common";
+import { figureNear, StepFigure, useFigures, type Fig } from "../components/Figures";
 import { go, href } from "../route";
 
 export default function TrainingTab({ id, reportState, hasRecord, onRegenerated }: {
@@ -12,6 +13,7 @@ export default function TrainingTab({ id, reportState, hasRecord, onRegenerated 
   onRegenerated: () => void;
 }) {
   const busy = BUSY_STATES.includes(reportState);
+  const [figs] = useFigures(id);
   const [load, reload] = useLoad(
     () => call(api.GET("/api/reports/{rid}/scenario", { params: { path: { rid: id } } })),
     [id, busy],
@@ -72,7 +74,7 @@ export default function TrainingTab({ id, reportState, hasRecord, onRegenerated 
               <div className="banner">교관 검수 전 초안입니다. 교육에 쓰기 전에 교관이 내용을 확인하세요.</div>
             )}
             <LlmNotice>시나리오는 보고서를 바탕으로 LLM이 작성했습니다. 원문과 대조하세요.</LlmNotice>
-            <Player key={JSON.stringify(sc)} id={id} sc={sc} />
+            <Player key={JSON.stringify(sc)} id={id} sc={sc} figs={figs.state === "ok" ? figs.data : []} />
           </>
         )}
       </Loaded>
@@ -80,7 +82,7 @@ export default function TrainingTab({ id, reportState, hasRecord, onRegenerated 
   );
 }
 
-function Player({ id, sc }: { id: string; sc: Scenario }) {
+function Player({ id, sc, figs }: { id: string; sc: Scenario; figs: Fig[] }) {
   const [step, setStep] = useState(-1); // -1 시작 화면, steps.length 결과
   const [picked, setPicked] = useState<(string | null)[]>(() => sc.steps.map(() => null));
 
@@ -120,7 +122,10 @@ function Player({ id, sc }: { id: string; sc: Scenario }) {
   return (
     <div className="player">
       <div className="progress">판단 지점 {step + 1} / {sc.steps.length}</div>
-      <div className="situation">{s.situation}</div>
+      <div className={`step-body ${figureNear(figs, s.evidence?.page) ? "with-fig" : ""}`}>
+        <div className="situation">{s.situation}</div>
+        <StepFigure rid={id} fig={figureNear(figs, s.evidence?.page)} />
+      </div>
       <p className="question">{s.question}</p>
       {s.options.map((o) => {
         const cls = !answered ? "" : o.id === s.answer_id ? "correct" : o.id === mine ? "wrong" : "";

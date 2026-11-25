@@ -12,13 +12,13 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import briefing as briefing_mod
 from . import search, store, watch
 from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Query, RelatedGroup,
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
-                         UploadResult, AppConfig, UploadUrlRequest, UploadUrlResult, ProcessRequest, ReportStatus)
+                         UploadResult, FigureMeta, AppConfig, UploadUrlRequest, UploadUrlResult, ProcessRequest, ReportStatus)
 from .llm import LLMError
 from .pipeline import BUSY, heal, in_request, ingest_bytes, mark_interrupted, process, reprocessable
 from .rule_aliases import canonical_key
@@ -160,6 +160,25 @@ def get_pdf(rid: str):
     if p is None:
         raise HTTPException(404)
     return FileResponse(p, media_type="application/pdf")
+
+
+@app.get("/api/reports/{rid}/figures", response_model=list[FigureMeta], tags=["reports"])
+def list_figures(rid: str):
+    """보고서의 그림·사진 (설명 줄 [그림N] 기준으로 잘라낸 것). 아직 뽑지 않았거나 없으면 빈 목록."""
+    _need(rid, "status")
+    return [FigureMeta(**{k: m[k] for k in ("n", "page", "label", "caption", "width", "height")},
+                       url=f"/api/reports/{rid}/figures/{m['n']}.webp?v={m.get('key', '')}")
+            for m in (store.read(rid, "figures") or [])]
+
+
+@app.get("/api/reports/{rid}/figures/{n}.webp", tags=["reports"], response_class=Response)
+def get_figure(rid: str, n: int):
+    data = store.read_blob(rid, f"figures/{n}.webp")
+    if data is None:
+        raise HTTPException(404, "그림 없음")
+    # 주소에 내용 해시(?v=)가 붙으므로 오래 캐시해도 된다 (Vercel CDN도 캐시)
+    return Response(data, media_type="image/webp",
+                    headers={"Cache-Control": "public, max-age=86400, s-maxage=31536000, immutable"})
 
 
 @app.get("/api/reports/{rid}/related", response_model=list[RelatedGroup], tags=["reports"])

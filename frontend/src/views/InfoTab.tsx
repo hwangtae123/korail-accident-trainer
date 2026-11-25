@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { api, type AccidentRecord, type Schemas } from "../api/client";
 import { call, useLoad, type Result } from "../api/call";
 import { clip, Empty, ErrorBox, EvidenceLine, Loaded, Loading, LlmNotice, Md, PageLink } from "../components/common";
+import { FigureGallery } from "../components/Figures";
 import { href } from "../route";
 
 export default function InfoTab({ id, record: r }: { id: string; record: AccidentRecord }) {
@@ -15,6 +16,7 @@ export default function InfoTab({ id, record: r }: { id: string; record: Acciden
   return (
     <>
       <RelatedCard id={id} />
+      <FigureGallery rid={id} />
       <div className="card">
         <div className="banner">모든 항목은 LLM이 추출한 결과입니다. p.N을 눌러 원문과 대조하세요.</div>
 

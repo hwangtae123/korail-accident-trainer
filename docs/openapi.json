@@ -287,6 +287,97 @@
         }
       }
     },
+    "/api/reports/{rid}/figures": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List Figures",
+        "description": "보고서의 그림·사진 (설명 줄 [그림N] 기준으로 잘라낸 것). 아직 뽑지 않았거나 없으면 빈 목록.",
+        "operationId": "list_figures_api_reports__rid__figures_get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FigureMeta"
+                  },
+                  "title": "Response List Figures Api Reports  Rid  Figures Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/figures/{n}.webp": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Figure",
+        "operationId": "get_figure_api_reports__rid__figures__n__webp_get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "n",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/{rid}/related": {
       "get": {
         "tags": [
@@ -1005,6 +1096,53 @@
         "type": "object",
         "title": "Evidence",
         "description": "모든 추출 항목에 붙는 근거. 사람이 원문과 대조할 수 있게 쪽 번호를 남긴다."
+      },
+      "FigureMeta": {
+        "properties": {
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "원문 쪽 번호"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "그림 3, 사진 2 …"
+          },
+          "caption": {
+            "type": "string",
+            "title": "Caption",
+            "description": "그림 설명 줄 (보고서 원문)"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "이미지 주소 (WebP)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n",
+          "page",
+          "label",
+          "caption",
+          "width",
+          "height",
+          "url"
+        ],
+        "title": "FigureMeta"
       },
       "HTTPValidationError": {
         "properties": {

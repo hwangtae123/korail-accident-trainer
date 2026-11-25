@@ -14,10 +14,13 @@ create table if not exists public.reports (
   parsed      jsonb,                               -- {pages: ["[p.N]\n…"], sections: {…}}  근거 확인용
   record      jsonb,                               -- 구조화된 사고 정보 (AccidentRecord)
   scenario    jsonb,                               -- 판단 훈련 시나리오 (교관 편집 포함)
+  figures     jsonb,                               -- 그림·사진 목록 [{n, page, label, caption, width, height, key}] (이미지는 Storage <id>/figures/)
   ingested_at timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 create index if not exists reports_ingested_at_idx on public.reports (ingested_at desc);
+-- 나중에 더한 칸 (이미 만든 테이블에도 적용)
+alter table public.reports add column if not exists figures jsonb;
 
 -- 검색 조각 (개요·원인·권고·본문 …) + 임베딩.
 -- 차원을 고정하지 않는다 (EMBED_MODEL을 바꿔도 테이블은 그대로, 대신 /api/reindex 필요).

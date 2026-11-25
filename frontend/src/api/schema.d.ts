@@ -144,6 +144,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/{rid}/figures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Figures
+         * @description 보고서의 그림·사진 (설명 줄 [그림N] 기준으로 잘라낸 것). 아직 뽑지 않았거나 없으면 빈 목록.
+         */
+        get: operations["list_figures_api_reports__rid__figures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{rid}/figures/{n}.webp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Figure */
+        get: operations["get_figure_api_reports__rid__figures__n__webp_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/{rid}/related": {
         parameters: {
             query?: never;
@@ -481,6 +518,35 @@ export interface components {
              * @description quote가 해당 쪽 원문에 실제로 있는지 코드로 대조한 결과. null = 아직 확인 안 함
              */
             verified?: boolean | null;
+        };
+        /** FigureMeta */
+        FigureMeta: {
+            /** N */
+            n: number;
+            /**
+             * Page
+             * @description 원문 쪽 번호
+             */
+            page: number;
+            /**
+             * Label
+             * @description 그림 3, 사진 2 …
+             */
+            label: string;
+            /**
+             * Caption
+             * @description 그림 설명 줄 (보고서 원문)
+             */
+            caption: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /**
+             * Url
+             * @description 이미지 주소 (WebP)
+             */
+            url: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1051,6 +1117,67 @@ export interface operations {
             header?: never;
             path: {
                 rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_figures_api_reports__rid__figures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FigureMeta"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_figure_api_reports__rid__figures__n__webp_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rid: string;
+                n: number;
             };
             cookie?: never;
         };

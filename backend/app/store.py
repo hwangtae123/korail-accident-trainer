@@ -17,7 +17,7 @@ from pathlib import Path
 from . import db
 
 DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
-NAMES = ("status", "parsed", "record", "scenario")
+NAMES = ("status", "parsed", "record", "scenario", "figures")
 PDF_NAME = "report.pdf"
 
 
@@ -142,6 +142,37 @@ def iter_docs(*names: str) -> list[tuple[str, dict]]:
         rows = db.run(f"select id, {', '.join(names)} from public.reports where status <> cast('{{}}' as jsonb) order by id")
         return [(r[0], {n: _val(v) for n, v in zip(names, r[1:])}) for r in rows]
     return [(rid, {n: read(rid, n) for n in names}) for rid in list_ids()]
+
+
+# ---------- 파일 (그림 이미지 등) ----------
+
+def _safe(rel: str) -> str:
+    if ".." in rel.split("/") or rel.startswith("/"):
+        raise ValueError(f"잘못된 경로: {rel}")
+    return rel
+
+
+def save_blob(rid: str, rel: str, data: bytes, content_type: str) -> None:
+    """보고서에 딸린 파일(예: figures/3.webp). Supabase면 Storage <id>/<rel>, 아니면 data/<id>/<rel>."""
+    rel = _safe(rel)
+    if db.enabled():
+        from . import supa_storage
+
+        supa_storage.upload(f"{rid}/{rel}", data, content_type)
+        return
+    p = rdir(rid) / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+
+
+def read_blob(rid: str, rel: str) -> bytes | None:
+    rel = _safe(rel)
+    if db.enabled():
+        from . import supa_storage
+
+        return supa_storage.download(f"{rid}/{rel}")
+    p = DATA_DIR / rid / rel
+    return p.read_bytes() if p.exists() else None
 
 
 # ---------- 원문 PDF ----------

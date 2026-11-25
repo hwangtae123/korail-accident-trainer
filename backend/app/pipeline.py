@@ -29,6 +29,7 @@ def process(rid: str, only_scenario: bool = False) -> None:
                 raise FileNotFoundError("원문 PDF가 저장소에 없습니다 — 다시 올려주세요")
             parsed = _parse_or_ocr(rid, pdf_path)
             store.write(rid, "parsed", {"pages": parsed.pages, "sections": parsed.sections, "ocr": parsed.ocr})
+            _figures(rid, pdf_path, parsed)
 
             store.set_status(rid, "extracting", "사고 정보 구조화 중 (LLM)")
             record = verify_evidence(extract_record(parsed), parsed.pages)  # BE-1: 근거를 원문과 대조
@@ -64,6 +65,20 @@ def _parse_or_ocr(rid: str, pdf_path) -> ParsedReport:
     if hangul < MIN_HANGUL_PER_PAGE:
         raise NeedsOCR(f"OCR로도 글자를 거의 읽지 못했습니다 (쪽당 한글 {hangul:.0f}자)")
     return ParsedReport(pages=pages, sections=split_sections(pages), ocr=True)
+
+
+def _figures(rid: str, pdf_path, parsed: ParsedReport) -> None:
+    """그림·사진 뽑기. 실패해도 보고서 처리는 계속한다 (그림은 보조 자료)."""
+    if parsed.ocr:  # 글자를 못 읽는 PDF는 그림 설명 줄도 못 찾는다
+        store.write(rid, "figures", [])
+        return
+    store.set_status(rid, "parsing", "그림·사진 추출 중")
+    try:
+        from .figures import extract_and_save
+
+        extract_and_save(rid, pdf_path)
+    except Exception:
+        traceback.print_exc()
 
 
 def reprocessable(st: dict) -> bool:

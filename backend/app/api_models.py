@@ -62,6 +62,16 @@ class ProcessRequest(BaseModel):
     filename: str = Field("", max_length=300)
 
 
+class FigureMeta(BaseModel):
+    n: int
+    page: int = Field(description="원문 쪽 번호")
+    label: str = Field(description="그림 3, 사진 2 …")
+    caption: str = Field(description="그림 설명 줄 (보고서 원문)")
+    width: int
+    height: int
+    url: str = Field(description="이미지 주소 (WebP)")
+
+
 class Ok(BaseModel):
     ok: bool = True
 

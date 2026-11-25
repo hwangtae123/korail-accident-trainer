@@ -400,3 +400,56 @@ def test_ocr_needed_without_ocr_then_reprocessed_when_available(tmp_path):
     assert again["new"] is True  # 이제 OCR을 쓸 수 있으니 다시 처리
     st = client.get(f"/api/reports/{rid}").json()["status"]
     assert st["state"] == "ocr_needed" and "OCR로도" in st["message"]
+
+
+# ---------- 그림·사진 뽑기 ----------
+
+def _figure_pdf(path):
+    """가상 보고서 한 쪽: 본문 문단 + 사각형 도면 + "[그림1]" 설명 줄 + 그림을 가리키는 본문 문장 (테스트용, 실제 사고 아님)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfgen import canvas
+
+    pdfmetrics.registerFont(UnicodeCIDFont("HYGothic-Medium"))
+    c = canvas.Canvas(str(path), pagesize=A4)
+    c.setFont("HYGothic-Medium", 11)
+    body = "테스트용 가상 보고서의 본문 문장입니다. 실제 사고가 아니며 그림 뽑기를 시험하려고 넣었습니다."
+    y = 790
+    for _ in range(3):
+        c.drawString(60, y, body); y -= 16
+    c.setFillColorRGB(0.2, 0.4, 0.8); c.rect(80, 520, 420, 200, fill=1); c.setFillColorRGB(0, 0, 0)  # 도면
+    c.drawString(250, 620, "가상 선로")  # 그림 안 이름표
+    c.drawString(220, 500, "[그림1] 테스트용 가상 도면")
+    c.drawString(60, 470, "[그림1]과 같이 가상 선로를 그렸으며 이 문장은 그림 설명이 아니라 본문 문장입니다.")
+    for _ in range(3):
+        y2 = 450; c.drawString(60, y2, body)
+    c.showPage(); c.save()
+
+
+def test_extract_figures_from_captions(tmp_path):
+    from app import figures
+
+    pdf = tmp_path / "fig.pdf"
+    _figure_pdf(pdf)
+    figs = figures.extract(pdf)
+    assert [(f.label, f.caption, f.page) for f in figs] == [("그림 1", "테스트용 가상 도면", 1)]
+    assert figs[0].data[:4] == b"RIFF" and figs[0].height < figs[0].width  # WebP, 도면 영역만 (쪽 전체 아님)
+
+
+def test_figures_api_and_pipeline(tmp_path):
+    client = _client(fake_llm)
+    rid = _upload(client, "G")
+    assert client.get(f"/api/reports/{rid}/figures").json() == []  # 가상 보고서에는 [그림N]이 없다
+
+    from app import figures
+
+    pdf = tmp_path / "fig.pdf"
+    _figure_pdf(pdf)
+    metas = figures.extract_and_save(rid, pdf)
+    listed = client.get(f"/api/reports/{rid}/figures").json()
+    assert len(listed) == 1 and listed[0]["label"] == "그림 1" and listed[0]["url"].endswith(f"?v={metas[0]['key']}")
+    img = client.get(listed[0]["url"])
+    assert img.status_code == 200 and img.headers["content-type"] == "image/webp" and "immutable" in img.headers["cache-control"]
+    assert client.get(f"/api/reports/{rid}/figures/99.webp").status_code == 404
+    assert client.get("/api/reports/nope000000/figures").status_code == 404
