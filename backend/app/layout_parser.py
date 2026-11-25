@@ -63,6 +63,9 @@ def run_parser(pdf_path: Path) -> Path | None:
     env = {**os.environ, "PARSE_DATA_DIR": str(work / "in"), "PARSE_OUT_DIR": str(work / "out"),
            "PARSE_DOCS_DIR": str(work / "docs"), "PARSE_PROFILE": "report", "PARSE_FONT_SAMPLE_PAGES": "40"}
     env.pop("PARSE_DOC", None)
+    # 파서는 별도 프로세스라, 지금 프로세스가 찾는 패키지 경로를 그대로 넘긴다.
+    # (Vercel 함수는 설치한 패키지 폴더를 실행 중에 sys.path로만 더하므로, 넘기지 않으면 새 프로세스가 yaml 등을 못 찾는다)
+    env["PYTHONPATH"] = os.pathsep.join([p for p in sys.path if p] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     try:
         proc = subprocess.run([sys.executable, str(PARSER_DIR / "parsing" / "run.py"), "--skip", "render,leak"],
                               cwd=PARSER_DIR, env=env, capture_output=True, text=True, encoding="utf-8",
