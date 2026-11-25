@@ -18,6 +18,9 @@ from .verify import verify_evidence
 
 
 def process(rid: str, only_scenario: bool = False) -> None:
+    from . import llm
+
+    llm.reset_fallback()
     try:
         if only_scenario:
             parsed = ParsedReport(**store.read(rid, "parsed"))
@@ -42,7 +45,8 @@ def process(rid: str, only_scenario: bool = False) -> None:
         scenario = verify_evidence(build_scenario(parsed, record), parsed.pages)
         store.write(rid, "scenario", scenario.model_dump())
         how = "OCR로 읽음 · " if parsed.ocr else ""
-        store.set_status(rid, "done", f"{how}섹션 {len(parsed.sections)}개 인식, 시나리오 {len(scenario.steps)}단계")
+        fb = f" · {llm.fallback_used()}로 대체 처리" if llm.fallback_used() else ""
+        store.set_status(rid, "done", f"{how}섹션 {len(parsed.sections)}개 인식, 시나리오 {len(scenario.steps)}단계{fb}")
     except NeedsOCR as e:
         store.set_status(rid, "ocr_needed", f"OCR이 필요한 PDF입니다 — {e}")
     except Exception as e:  # 해커톤용: 오류를 화면에 그대로 보여준다

@@ -39,7 +39,21 @@ def enabled() -> bool:
         return True
     if os.getenv("OCR_ENABLED", "1") == "0":
         return False
-    return os.getenv("LLM_PROVIDER", "anthropic").lower() == "openai" and bool(os.getenv("OPENAI_API_KEY"))
+    return bool(_ocr_providers())
+
+
+def _ocr_providers():
+    """OCR을 맡길 비전 모델 (순서대로): OpenAI(OCR_MODEL 또는 LLM_MODEL) -> Gemini(OCR_FALLBACK_MODEL 또는 LLM_FALLBACK_MODEL).
+    키가 있는 것만."""
+    from .llm import Provider, providers
+
+    out = []
+    for p in providers():
+        if p.name == "openai" and os.getenv("OPENAI_API_KEY"):
+            out.append(Provider("openai", os.getenv("OCR_MODEL") or p.model))
+        elif p.name == "gemini" and os.getenv("GEMINI_API_KEY"):
+            out.append(Provider("gemini", os.getenv("OCR_FALLBACK_MODEL") or p.model))
+    return [p for p in out if p.model]
 
 
 def _render(pdf_path: Path, dpi: int) -> list[bytes]:
@@ -61,29 +75,37 @@ def _render(pdf_path: Path, dpi: int) -> list[bytes]:
     return out
 
 
+def _read_with(p, b64: str) -> str:
+    from .llm import openai_client
+
+    kwargs = {}
+    if p.name == "openai" and os.getenv("OCR_REASONING", "none") == "none":
+        kwargs["reasoning_effort"] = "none"  # 실측: 추론을 끄면 출력 토큰 절반, 5초, 정확도 같음
+    client = openai_client(p).with_options(timeout=float(os.getenv("OCR_TIMEOUT", "45")))
+    r = client.chat.completions.create(model=p.model, messages=[{"role": "user", "content": [
+        {"type": "text", "text": PROMPT},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}},
+    ]}], **kwargs)
+    return (r.choices[0].message.content or "").strip()
+
+
 def _read_page(png: bytes, pno: int) -> str:
+    """한 쪽 읽기: 기본 모델로 2번까지, 안 되면 대체 모델(Gemini)로 2번까지."""
     if _stub is not None:
         return _stub(png, pno)
-    from openai import OpenAI
-
-    client = OpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None, timeout=120)
-    model = os.getenv("OCR_MODEL") or os.getenv("LLM_MODEL")
-    if not model:
-        raise OCRError("OCR_MODEL 또는 LLM_MODEL을 지정하세요")
+    chain = _ocr_providers()
+    if not chain:
+        raise OCRError("OCR에 쓸 모델이 없습니다 (OPENAI_API_KEY·LLM_MODEL 또는 GEMINI_API_KEY)")
     b64 = base64.b64encode(png).decode()
-    last = None
-    for attempt in range(3):
-        try:
-            kwargs = {"reasoning_effort": "none"} if os.getenv("OCR_REASONING", "none") == "none" else {}
-            r = client.chat.completions.create(model=model, messages=[{"role": "user", "content": [
-                {"type": "text", "text": PROMPT},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}},
-            ]}], **kwargs)
-            return (r.choices[0].message.content or "").strip()
-        except Exception as e:  # 일시 오류(속도 제한 등)는 잠깐 쉬고 다시
-            last = e
-            time.sleep(2 * (attempt + 1))
-    raise OCRError(f"{pno}쪽 OCR 실패: {type(last).__name__}: {str(last)[:200]}")
+    errors = []
+    for p in chain:
+        for attempt in range(2):
+            try:
+                return _read_with(p, b64)
+            except Exception as e:  # 일시 오류(속도 제한 등)는 잠깐 쉬고 다시, 그래도 안 되면 다음 모델
+                errors.append(f"{p.label}: {type(e).__name__}: {str(e)[:120]}")
+                time.sleep(2 * (attempt + 1))
+    raise OCRError(f"{pno}쪽 OCR 실패 — " + " / ".join(errors[-2:]))
 
 
 def ocr_pdf(pdf_path: str | Path, progress: Callable[[int, int], None] | None = None) -> list[str]:

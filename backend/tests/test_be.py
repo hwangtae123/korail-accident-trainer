@@ -453,3 +453,100 @@ def test_figures_api_and_pipeline(tmp_path):
     assert img.status_code == 200 and img.headers["content-type"] == "image/webp" and "immutable" in img.headers["cache-control"]
     assert client.get(f"/api/reports/{rid}/figures/99.webp").status_code == 404
     assert client.get("/api/reports/nope000000/figures").status_code == 404
+
+
+# ---------- LLM 대체 공급자 (GPT가 죽으면 Gemini) ----------
+
+@pytest.fixture()
+def gpt_then_gemini(monkeypatch):
+    from app import llm
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "gpt-test")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "gemini")
+    monkeypatch.setenv("LLM_FALLBACK_MODEL", "gemini-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-test")
+    llm.set_stub(None)
+    calls = []
+
+    def install(openai_fn, gemini_fn):
+        def fake_call(p, system, user):
+            calls.append(p.name)
+            return (openai_fn if p.name == "openai" else gemini_fn)(system, user)
+        monkeypatch.setattr(llm, "_call", fake_call)
+
+    yield install, calls
+    llm.set_stub(fake_llm)
+
+
+def _down(system, user):
+    raise ConnectionError("OpenAI 서버 응답 없음 (테스트)")
+
+
+def test_fallback_text_when_gpt_down(gpt_then_gemini):
+    from app import llm
+
+    install, calls = gpt_then_gemini
+    install(_down, lambda s, u: "Gemini 답")
+    llm.reset_fallback()
+    assert llm.complete_text("sys", "q") == "Gemini 답"
+    assert calls == ["openai", "gemini"] and llm.fallback_used() == "Gemini"
+
+
+def test_fallback_json_after_bad_format(gpt_then_gemini):
+    from app import llm
+    from app.schema import Evidence
+
+    install, calls = gpt_then_gemini
+    install(lambda s, u: "형식이 틀린 답", lambda s, u: '{"page": 3, "quote": "원문"}')
+    ev = llm.complete_json("sys", "q", Evidence)
+    assert ev.page == 3 and calls == ["openai", "openai", "gemini"]  # GPT 2번(재시도) 실패 후 Gemini
+
+
+def test_both_down_reports_both_reasons(gpt_then_gemini):
+    import pytest as _pt
+
+    from app import llm
+
+    install, _ = gpt_then_gemini
+    install(_down, lambda s, u: (_ for _ in ()).throw(TimeoutError("Gemini도 응답 없음")))
+    with _pt.raises(llm.LLMError) as ei:
+        llm.complete_text("sys", "q")
+    assert "GPT 실패" in str(ei.value) and "Gemini 실패" in str(ei.value)
+
+
+def test_pipeline_marks_gemini_fallback(gpt_then_gemini):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    install, calls = gpt_then_gemini
+    install(_down, fake_llm)  # GPT는 죽고 Gemini가 가짜 보고서 답을 준다
+    rid = _upload(TestClient(app), "F2")
+    st = store.read(rid, "status")
+    assert st["state"] == "done" and st["message"].endswith("Gemini로 대체 처리"), st
+    assert "gemini" in calls
+
+
+def test_ocr_falls_back_to_gemini(monkeypatch):
+    from app import ocr
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "gpt-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-test")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-test")
+    monkeypatch.setattr(ocr.time, "sleep", lambda s: None)
+    used = []
+
+    def fake_read(p, b64):
+        used.append(p.name)
+        if p.name == "openai":
+            raise ConnectionError("down")
+        return "Gemini가 읽은 글자"
+
+    monkeypatch.setattr(ocr, "_read_with", fake_read)
+    assert ocr.enabled()
+    assert ocr._read_page(b"\x89PNG fake", 1) == "Gemini가 읽은 글자"
+    assert used == ["openai", "openai", "gemini"]
