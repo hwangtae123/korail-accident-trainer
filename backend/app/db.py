@@ -102,12 +102,38 @@ def connection():
                 _created -= 1
 
 
+def _pin_tx() -> bool:
+    """Supabase Transaction pooler(포트 6543)인가. 이때는 쿼리마다 트랜잭션으로 감싸야 한다:
+    pg8000은 한 쿼리를 '준비(Parse)'와 '실행(Bind)' 두 번에 나눠 보내는데, 트랜잭션 밖이면 풀러가 둘을
+    서로 다른 DB 연결로 보낼 수 있어 동시 요청이 많을 때 'unnamed prepared statement does not exist',
+    'bind message supplies N parameters' 오류가 난다. 트랜잭션 안에서는 한 연결에 묶인다."""
+    if os.getenv("DB_PIN_TX") in ("0", "1"):
+        return os.getenv("DB_PIN_TX") == "1"
+    return urlparse(url()).port == 6543
+
+
+def _run_once(conn, sql: str, params: dict) -> list[list]:
+    if not _pin_tx():
+        return conn.run(sql, **params) or []
+    conn.execute_simple("begin")  # 단순 쿼리(메시지 하나)라 풀러가 나누지 않는다
+    try:
+        rows = conn.run(sql, **params) or []
+        conn.execute_simple("commit")
+        return rows
+    except Exception:
+        try:
+            conn.execute_simple("rollback")
+        except Exception:
+            pass
+        raise
+
+
 def run(sql: str, **params: Any) -> list[list]:
     """SQL 한 문장 실행 (:이름 자리표시자). 결과 행 목록. 연결이 끊겨 있으면 한 번 다시 시도한다."""
     for attempt in (1, 2):
         try:
             with connection() as conn:
-                return conn.run(sql, **params) or []
+                return _run_once(conn, sql, params)
         except Exception as e:  # noqa: PERF203
             name = type(e).__name__
             if attempt == 1 and name in ("InterfaceError", "BrokenPipeError", "ConnectionResetError", "OSError"):

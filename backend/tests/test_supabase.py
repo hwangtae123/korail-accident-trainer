@@ -120,3 +120,27 @@ def test_direct_upload_flow(supa, tmp_path, monkeypatch):
         httpx.delete(f"{base}/storage/v1/object/{bucket}/{rid}/report.pdf",
                      headers={"Authorization": f"Bearer {key}", "apikey": key})
         search.reset_client()
+
+
+def test_many_concurrent_queries(supa, monkeypatch):
+    """Transaction pooler(6543)에서 동시 쿼리가 많아도 'unnamed prepared statement' 오류가 나지 않는다 (쿼리마다 트랜잭션)."""
+    import threading
+
+    monkeypatch.setenv("DB_POOL_SIZE", "12")
+    db.reset_pool()
+    errs = []
+
+    def worker(k):
+        for i in range(10):
+            try:
+                if i % 2:
+                    db.run("select count(*) from public.reports where id = :a", a=f"x{k}")
+                else:
+                    db.run("select count(*) from public.reports where id = :a or id = :b or state = :c", a="x", b="y", c="z")
+            except Exception as e:  # noqa: BLE001
+                errs.append(str(e)[:120])
+
+    ts = [threading.Thread(target=worker, args=(k,)) for k in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert not errs, errs[:3]
