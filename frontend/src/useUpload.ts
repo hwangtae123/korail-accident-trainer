@@ -62,11 +62,14 @@ export function useUpload(onUploaded: () => void) {
   const [notes, setNotes] = useState<UploadNote[]>([]);
 
   async function upload(files: FileList | null) {
-    if (!files || files.length === 0) return;
+    // 파일 목록을 바로 복사한다. 호출한 쪽이 곧바로 input.value = ""로 비우면 같은 FileList가 비어 버려서,
+    // 아래 await 뒤에 읽으면 0개가 되고 아무것도 올라가지 않는다.
+    const list = files ? Array.from(files) : [];
+    if (list.length === 0) return;
     setBusy(true);
     const cfg = await getConfig();
     const out: UploadNote[] = [];
-    for (const f of Array.from(files)) {
+    for (const f of list) {
       if (!f.name.toLowerCase().endsWith(".pdf")) {
         out.push({ name: f.name, text: "PDF 파일이 아님 — 건너뜀", kind: "bad" });
         continue;
