@@ -16,6 +16,9 @@ sys.path.insert(0, str(ROOT))
 os.environ["DATA_DIR"] = tempfile.mkdtemp()
 os.environ["LLM_PROVIDER"] = "stub"
 os.environ["EMBED_PROVIDER"] = "stub"
+# .env에 DATABASE_URL(Supabase)이 있어도 테스트는 로컬 파일 저장소만 쓴다 (load_dotenv는 이미 있는 값을 덮어쓰지 않는다)
+os.environ["DATABASE_URL"] = ""
+os.environ["VECTOR_STORE"] = "simple"
 
 PAGES = [
     ["테스트용 가상 보고서 (실제 사고 아님)", "ARAIB/R TEST-1", "목차", "1. 사실정보", "2. 분석", "3. 결론", "4. 안전권고"],

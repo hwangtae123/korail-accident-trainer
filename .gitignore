@@ -5,3 +5,8 @@ backend/inbox/
 **/.pytest_cache/
 frontend/node_modules/
 frontend/dist/
+# 파서 (parser/) 일괄 실행 결과·로그 (원본 PDF는 저장소 밖 ../data)
+parsed/
+parser/data/
+.env.local
+.env.*.local

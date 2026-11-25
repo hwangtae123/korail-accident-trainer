@@ -1,0 +1,14 @@
+.git
+.env
+**/.env
+**/__pycache__
+**/.pytest_cache
+backend/.venv
+backend/data
+backend/inbox
+frontend/node_modules
+frontend/dist
+parsed
+parser/data
+parser/out
+docs/reference-ui

@@ -8,7 +8,8 @@
 
 | 경로 | 담당 | 내용 |
 |---|---|---|
-| `backend/` | backend-dev | FastAPI, 파싱(pdfplumber), LLM 추출, ChromaDB 검색, pytest |
+| `backend/` | backend-dev | FastAPI, 파싱(레이아웃 파서 호출), LLM 추출, 검색(pgvector / 로컬 numpy), 저장(Supabase / 로컬 파일), pytest |
+| `parser/` | 리드 (고칠 때 리드에게 먼저 알림) | 레이아웃 파서: 보고서 PDF → 장·절 제목 트리·표·각주. 백엔드는 `backend/app/layout_parser.py`로 부른다 (실패하면 처리 상태 error + 이유. 다른 파서로 넘어가지 않음). 고치는 법 `parser/CUSTOMIZE.md` |
 | `frontend/` | frontend-dev | React + Vite + TypeScript |
 | `docs/openapi.json` | backend-dev가 스크립트로만 생성 | API 계약 (손으로 고치지 않음) |
 | `docs/api-contract.md`, `docs/backlog.md`, `docs/ui-spec.md`, `CLAUDE.md` | 리드 | 계약 설명, 작업 목록, 화면 명세 |
@@ -22,6 +23,11 @@
 - 개발용 가짜 데이터: `python scripts/seed_dev.py` (제목에 "테스트용 가상 보고서", 실제 사고 아님)
 - 서버: `uvicorn app.main:app --reload --port 8000` (키 없이 돌릴 땐 환경변수 `EMBED_PROVIDER=stub`)
 - 계약 내보내기: `python scripts/export_openapi.py` → `docs/openapi.json`
+- 저장소: `.env`에 `DATABASE_URL`이 있으면 Supabase(PostgreSQL + pgvector + Storage), 없으면 로컬 파일(`backend/data/`). 테스트는 항상 로컬 파일. 배포 방법 `docs/deploy-supabase.md`
+- 파싱: `parse_report`가 레이아웃 파서(`../parser`)를 서브프로세스로 돌린다 (보고서 한 건 20~70초). 파서 위치 `PARSER_DIR`, 시간 제한 `LAYOUT_PARSER_TIMEOUT`(초)
+
+파서 (`parser/`에서, 백엔드와 같은 가상환경):
+- 일괄 파싱: `python parsing/run.py` → `../../data`의 PDF를 `../parsed/`로 (폴더는 `config/paths.yaml`). 처음 돌릴 때 PDF마다 `config/docs/<doc_id>.yaml`이 생긴다
 
 프론트 (`frontend/`에서):
 - 설치: `npm install` (Node ^20.19 또는 >=22.12)

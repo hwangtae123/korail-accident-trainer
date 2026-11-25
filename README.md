@@ -12,7 +12,10 @@
 ```
 backend/    FastAPI + pdfplumber + LLM(OpenAI/Anthropic) + ChromaDB   (python -m pytest -q)
 frontend/   React 19 + Vite 8 + TypeScript + openapi-fetch          (npm run build)
+parser/     레이아웃 파서 (보고서 PDF → 장·절 트리·표·각주, 백엔드 parse_report가 씀)   (python parsing/run.py)
 docs/       계약·명세·작업 목록, reference-ui/ (이전 HTML 화면)
 ```
 
 실제 보고서로 돌리려면 `backend/.env.example`을 `.env`로 복사해 `OPENAI_API_KEY`, `LLM_MODEL`을 채운다.
+
+배포(Supabase + 백엔드 Docker 컨테이너 + Vercel 화면): **docs/deploy-supabase.md**

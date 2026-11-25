@@ -252,3 +252,60 @@ def test_page_chunks_skip_tables():
     assert "본문 문장 하나" in text and "본문 문장 둘" in text
     assert "|" not in text and "[표" not in text
     assert chunks[0][1] == 3
+
+
+# ---------- 파일 저장소: 읽는 중에 써도 Windows에서 PermissionError가 나지 않는다 ----------
+
+def test_file_store_concurrent_read_write():
+    import threading
+
+    rid = "concurrent"
+    store.write(rid, "status", {"state": "queued", "n": 0})
+    stop, errors = threading.Event(), []
+
+    def reader():
+        while not stop.is_set():
+            try:
+                assert store.read(rid, "status")["state"] == "queued"
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+    ts = [threading.Thread(target=reader) for _ in range(3)]
+    for t in ts:
+        t.start()
+    try:
+        for i in range(300):
+            store.write(rid, "status", {"state": "queued", "n": i})
+    finally:
+        stop.set()
+        for t in ts:
+            t.join()
+    assert not errors, errors[:3]
+    assert store.read(rid, "status")["n"] == 299
+
+
+# ---------- 화면을 Vercel에 따로 배포할 때: CORS ----------
+
+def test_cors_allows_vercel_origins():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    code = (
+        "from fastapi.testclient import TestClient\n"
+        "from app.main import app\n"
+        "c = TestClient(app)\n"
+        "def pre(o):\n"
+        "    r = c.options('/api/reports', headers={'Origin': o, 'Access-Control-Request-Method': 'POST'})\n"
+        "    return r.headers.get('access-control-allow-origin')\n"
+        "print(pre('https://accident-trainer.vercel.app'), pre('https://accident-trainer-git-main-team.vercel.app'),"
+        " pre('https://evil.example.com'), pre('https://kr.example.org'))\n"
+    )
+    env = {**__import__("os").environ, "CORS_ORIGINS": "https://kr.example.org/",
+           "CORS_ORIGIN_REGEX": r"https://accident-trainer(-[a-z0-9-]+)?\.vercel\.app"}
+    out = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parent.parent, env=env,
+                         capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert out.returncode == 0, out.stderr[-500:]
+    allowed = out.stdout.split()[-4:]
+    assert allowed == ["https://accident-trainer.vercel.app", "https://accident-trainer-git-main-team.vercel.app",
+                       "None", "https://kr.example.org"], out.stdout

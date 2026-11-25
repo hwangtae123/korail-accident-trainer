@@ -5,8 +5,9 @@ EMBED_PROVIDER=openai (기본)  EMBED_MODEL=text-embedding-3-small
 EMBED_PROVIDER=stub           키 없이 테스트 (글자 n-gram 해시)
 
 벡터 저장소는 VECTOR_STORE 환경변수로 고른다.
-VECTOR_STORE=auto (기본)   chromadb를 import할 수 있으면 ChromaDB, 아니면 simple
-VECTOR_STORE=chroma        ChromaDB (data/chroma)
+VECTOR_STORE=auto (기본)   DATABASE_URL이 있으면 pgvector, 아니면 chromadb를 import할 수 있으면 ChromaDB, 아니면 simple
+VECTOR_STORE=pgvector      Supabase public.report_chunks (app/vectorstore.py PgCollection)
+VECTOR_STORE=chroma        ChromaDB (data/chroma, pip install chromadb 필요)
 VECTOR_STORE=simple        numpy 대체 저장소 (data/vectors, app/vectorstore.py)
   ※ Windows에서 VC++ 재배포 패키지가 없거나 '스마트 앱 컨트롤'이 grpc DLL을 막으면 chromadb import가 실패한다.
 """
@@ -24,15 +25,21 @@ CHUNK = 700
 OVERLAP = 100
 _client = None
 _col = None
-backend_name = ""  # 실제로 쓰는 저장소 (chroma | simple)
+backend_name = ""  # 실제로 쓰는 저장소 (pgvector | chroma | simple)
 
 
 def _collection():
     global _client, _col, backend_name
     if _col is not None:
-        return _col if backend_name == "simple" else _client.get_or_create_collection(
+        return _col if backend_name != "chroma" else _client.get_or_create_collection(
             COLLECTION, metadata={"hnsw:space": "cosine"})
     choice = os.getenv("VECTOR_STORE", "auto").lower()
+    if choice == "pgvector" or (choice == "auto" and store.backend() == "supabase"):
+        from .vectorstore import PgCollection
+
+        _col = PgCollection()
+        backend_name = "pgvector"
+        return _col
     if choice in ("auto", "chroma"):
         try:
             import chromadb
@@ -45,7 +52,7 @@ def _collection():
             if choice == "chroma":
                 raise
             print(f"[search] chromadb를 쓸 수 없어 simple 저장소로 대신함: {e}", flush=True)
-    elif choice != "simple":
+    elif choice not in ("simple", "pgvector"):
         raise RuntimeError(f"알 수 없는 VECTOR_STORE: {choice}")
     from .vectorstore import SimpleCollection
 

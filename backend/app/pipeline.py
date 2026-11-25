@@ -10,12 +10,14 @@ from .verify import verify_evidence
 
 def process(rid: str, only_scenario: bool = False) -> None:
     try:
-        pdf_path = store.rdir(rid) / "report.pdf"
         if only_scenario:
             parsed = ParsedReport(**store.read(rid, "parsed"))
             record = AccidentRecord(**store.read(rid, "record"))
         else:
             store.set_status(rid, "parsing", "PDF 텍스트 추출 중")
+            pdf_path = store.local_pdf(rid)
+            if pdf_path is None:
+                raise FileNotFoundError("원문 PDF가 저장소에 없습니다 — 다시 올려주세요")
             parsed = parse_report(pdf_path)
             store.write(rid, "parsed", {"pages": parsed.pages, "sections": parsed.sections})
 
@@ -23,7 +25,7 @@ def process(rid: str, only_scenario: bool = False) -> None:
             record = verify_evidence(extract_record(parsed), parsed.pages)  # BE-1: 근거를 원문과 대조
             store.write(rid, "record", record.model_dump())
 
-            store.set_status(rid, "indexing", "유사사고 검색용 색인 중 (ChromaDB)")
+            store.set_status(rid, "indexing", "유사사고 검색용 색인 중")
             search.index_report(rid)
 
         store.set_status(rid, "scenario", "판단 훈련 시나리오 생성 중 (LLM)")
@@ -43,7 +45,7 @@ def ingest_bytes(data: bytes, filename: str) -> tuple[str, bool]:
     st = store.read(rid, "status") or {}
     if st.get("state") in {"done", "ocr_needed"} | BUSY:
         return rid, False
-    (store.rdir(rid) / "report.pdf").write_bytes(data)
+    store.save_pdf(rid, data)
     store.set_status(rid, "queued", "대기 중", filename=filename)
     return rid, True
 
@@ -53,6 +55,6 @@ BUSY = {"queued", "parsing", "extracting", "indexing", "scenario"}
 
 def mark_interrupted() -> None:
     """서버가 처리 도중 꺼졌으면 '처리 중'에 멈춰 있는 건을 다시 올릴 수 있게 오류로 바꾼다."""
-    for rid in store.list_ids():
-        if (store.read(rid, "status") or {}).get("state") in BUSY:
+    for rid, docs in store.iter_docs("status"):
+        if (docs["status"] or {}).get("state") in BUSY:
             store.set_status(rid, "error", "서버 재시작으로 처리가 중단됨 — 다시 올려주세요")

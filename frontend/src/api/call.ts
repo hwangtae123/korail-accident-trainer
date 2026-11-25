@@ -21,13 +21,21 @@ function errorMessage(status: number, error: unknown): string {
   return `서버 오류 (HTTP ${status})`;
 }
 
+const NO_BACKEND = "백엔드 서버가 연결되지 않았습니다 — 배포 설정의 VITE_API_BASE(백엔드 주소)를 확인하세요";
+
 export async function call<T>(p: Promise<Fetched<T>>): Promise<Result<T>> {
   try {
     const { data, error, response } = await p;
     if (response.ok) return { ok: true, data: data as T, status: response.status };
+    // API 대신 정적 호스팅의 HTML(404 페이지 등)이 오면 백엔드 주소가 설정되지 않은 것이다 (예: Vercel에 화면만 배포)
+    if ((response.headers.get("content-type") ?? "").includes("text/html")) {
+      return { ok: false, status: 0, message: NO_BACKEND };
+    }
     return { ok: false, status: response.status, message: errorMessage(response.status, error) };
   } catch (e) {
-    return { ok: false, status: 0, message: `서버에 연결할 수 없습니다 (backend가 8000번에 떠 있는지 확인) — ${String(e)}` };
+    const local = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    const hint = local ? "backend가 8000번에 떠 있는지 확인" : "백엔드 주소(VITE_API_BASE)와 서버 상태 확인";
+    return { ok: false, status: 0, message: `서버에 연결할 수 없습니다 (${hint}) — ${String(e)}` };
   }
 }
 

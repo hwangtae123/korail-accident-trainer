@@ -152,3 +152,75 @@ class SimpleCollection:
                 out["metadatas"].append([self.metadatas[cand[j]] for j in order])
                 out["distances"].append([float(1 - sims[j]) for j in order])
         return out
+
+
+class PgCollection:
+    """Supabase pgvector (public.report_chunks). SimpleCollection과 같은 모양.
+    metadatas의 report_id·title·kind·page는 테이블 칸으로 저장한다 (page -1 = 쪽 번호 없음)."""
+
+    def __init__(self):
+        from . import db
+
+        self.db = db
+
+    @staticmethod
+    def _vec(v) -> str:
+        return "[" + ",".join(f"{float(x):.7g}" for x in v) + "]"
+
+    @staticmethod
+    def _where_sql(where: dict | None) -> tuple[str, dict]:
+        if not where:
+            return "", {}
+        (key, cond), = where.items()  # search.py는 report_id 조건 하나만 쓴다
+        if key != "report_id":
+            raise ValueError(f"지원하지 않는 where: {where}")
+        if isinstance(cond, dict):
+            (op, arg), = cond.items()
+            if op == "$ne":
+                return "where report_id <> :w", {"w": arg}
+            if op == "$eq":
+                return "where report_id = :w", {"w": arg}
+            raise ValueError(f"지원하지 않는 where: {where}")
+        return "where report_id = :w", {"w": cond}
+
+    def count(self) -> int:
+        return int(self.db.run("select count(*) from public.report_chunks")[0][0])
+
+    def add(self, ids: list[str], documents: list[str], embeddings: list[list[float]], metadatas: list[dict]) -> None:
+        """한 보고서의 조각 수십 개를 쿼리 한 번으로 넣는다 (unnest)."""
+        if not ids:
+            return
+        pages = [m.get("page") for m in metadatas]
+        self.db.run(
+            "insert into public.report_chunks (id, report_id, title, kind, page, text, embedding) "
+            "select i, r, t, k, p, x, cast(e as vector) from unnest("
+            "cast(:ids as text[]), cast(:rids as text[]), cast(:titles as text[]), cast(:kinds as text[]), "
+            "cast(cast(:pages as text[]) as int[]), cast(:texts as text[]), cast(:embs as text[])) as u(i, r, t, k, p, x, e) "
+            "on conflict (id) do update set report_id = excluded.report_id, title = excluded.title, "
+            "kind = excluded.kind, page = excluded.page, text = excluded.text, embedding = excluded.embedding",
+            ids=list(ids), rids=[m["report_id"] for m in metadatas], titles=[m.get("title", "") for m in metadatas],
+            kinds=[m.get("kind", "") for m in metadatas],
+            pages=[None if pg is None or pg < 0 else str(int(pg)) for pg in pages],  # text[]로 보내 int[]로 변환 (전부 null이어도 타입이 정해지게)
+            texts=list(documents), embs=[self._vec(e) for e in embeddings])
+
+    def delete(self, where: dict | None = None, ids: list[str] | None = None) -> None:
+        if ids:
+            self.db.run("delete from public.report_chunks where id = any(cast(:ids as text[]))", ids=list(ids))
+        if where is not None:
+            sql, params = self._where_sql(where)
+            self.db.run(f"delete from public.report_chunks {sql}", **params)
+
+    def query(self, query_embeddings: list[list[float]], n_results: int = 10, where: dict | None = None) -> dict:
+        out = {"ids": [], "documents": [], "metadatas": [], "distances": []}
+        cond, params = self._where_sql(where)
+        for q in query_embeddings:
+            rows = self.db.run(
+                "select id, text, report_id, title, kind, page, embedding <=> cast(:q as vector) as dist "
+                f"from public.report_chunks {cond} order by dist limit :n",
+                q=self._vec(q), n=int(n_results), **params)
+            out["ids"].append([r[0] for r in rows])
+            out["documents"].append([r[1] for r in rows])
+            out["metadatas"].append([{"report_id": r[2], "title": r[3], "kind": r[4],
+                                      "page": r[5] if r[5] is not None else -1} for r in rows])
+            out["distances"].append([float(r[6]) for r in rows])
+        return out

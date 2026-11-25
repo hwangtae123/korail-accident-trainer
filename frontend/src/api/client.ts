@@ -3,7 +3,11 @@
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
 
-export const api = createClient<paths>({ baseUrl: "" });
+/** 백엔드 주소. 비우면 같은 주소의 /api (개발: Vite 프록시, Docker: FastAPI가 화면도 내보냄).
+ *  Vercel처럼 화면을 따로 배포하면 VITE_API_BASE=https://백엔드주소 (끝 / 없이). 빌드할 때 들어간다. */
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+
+export const api = createClient<paths>({ baseUrl: API_BASE });
 
 export type Schemas = components["schemas"];
 export type ReportSummary = Schemas["ReportSummary"];
@@ -18,7 +22,7 @@ export type Briefing = Schemas["Briefing"];
 
 /** 원문 PDF의 특정 쪽 링크 (근거 확인용) */
 export const pdfUrl = (rid: string, page?: number | null) =>
-  `/api/reports/${rid}/pdf${page ? `#page=${page}` : ""}`;
+  `${API_BASE}/api/reports/${rid}/pdf${page ? `#page=${page}` : ""}`;
 
 /** 처리 중 상태 (이 상태면 폴링을 계속한다) */
 export const BUSY_STATES: ReportStatus["state"][] = ["queued", "parsing", "extracting", "indexing", "scenario"];

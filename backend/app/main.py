@@ -6,6 +6,7 @@
 import os
 from collections import Counter
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
@@ -38,7 +39,10 @@ async def lifespan(_app):
 app = FastAPI(title="사고사례 판단 훈련 API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","),
+    # 화면을 다른 주소(Vercel)에 두면 그 주소를 허용한다. CORS_ORIGINS: 쉼표로 구분한 정확한 주소,
+    # CORS_ORIGIN_REGEX: 미리보기 배포처럼 바뀌는 주소 (예: https://accident-trainer(-[a-z0-9-]+)?\.vercel\.app)
+    allow_origins=[o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()],
+    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX") or None,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -80,9 +84,9 @@ async def upload(file: UploadFile, bg: BackgroundTasks):
 def list_reports():
     """새로 접수된 순(ingested_at 내림차순)."""
     out = []
-    for rid in store.list_ids():
-        rec = store.read(rid, "record") or {}
-        st = store.read(rid, "status") or {}
+    for rid, docs in store.iter_docs("status", "record"):
+        rec = docs["record"] or {}
+        st = docs["status"] or {}
         out.append(ReportSummary(
             id=rid, status=st, title=rec.get("title") or st.get("filename", rid),
             report_no=rec.get("report_no", ""), accident_type=rec.get("accident_type", ""),
@@ -99,8 +103,8 @@ def get_report(rid: str):
 @app.get("/api/reports/{rid}/pdf", tags=["reports"], response_class=FileResponse)
 def get_pdf(rid: str):
     """원문 PDF. 근거 쪽으로 바로 가려면 프론트에서 #page=N을 붙여 연다."""
-    p = store.DATA_DIR / rid / "report.pdf"
-    if not p.exists():
+    p = store.local_pdf(rid)
+    if p is None:
         raise HTTPException(404)
     return FileResponse(p, media_type="application/pdf")
 
@@ -172,8 +176,8 @@ def stats():
     types, rules, training = Counter(), Counter(), []
     names: dict[str, Counter] = {}  # 규정 키 -> 실제 표기들 (가장 많이 쓴 표기를 이름으로 보여준다)
     n = 0
-    for rid in store.list_ids():
-        rec = store.read(rid, "record")
+    for rid, docs in store.iter_docs("record"):
+        rec = docs["record"]
         if not rec:
             continue
         n += 1
@@ -213,5 +217,14 @@ def briefing(body: BriefingRequest):
 
 @app.post("/api/reindex", response_model=ReindexResult, tags=["system"])
 def reindex():
-    n = {rid: search.index_report(rid) for rid in store.list_ids() if store.read(rid, "record")}
+    n = {rid: search.index_report(rid) for rid, docs in store.iter_docs("record") if docs["record"]}
     return ReindexResult(indexed=n)
+
+
+# ---------- 화면 (배포용) ----------
+# 프론트 빌드(frontend/dist)가 있으면 같은 서버가 "/"에서 내보낸다 (API는 /api/…). 개발 중에는 Vite(5173)를 쓴다.
+_dist = Path(os.getenv("FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend" / "dist"))
+if (_dist / "index.html").exists():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_dist, html=True), name="frontend")
