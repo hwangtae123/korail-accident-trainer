@@ -53,8 +53,10 @@ class SimpleCollection:
 
     def _file_stamp(self):
         meta_p, emb_p = self._files()
+        # 수정 시각만으로는 부족하다 (Windows는 시각 해상도가 ~15ms라 연달아 쓴 두 번이 같은 값일 수 있음).
+        # 저장은 항상 새 파일로 바꿔치기(os.replace)하므로 파일 ID(st_ino)가 매번 바뀐다.
         try:
-            return (meta_p.stat().st_mtime_ns, emb_p.stat().st_mtime_ns)
+            return tuple((s.st_ino, s.st_mtime_ns, s.st_size) for s in (meta_p.stat(), emb_p.stat()))
         except FileNotFoundError:
             return None
 

@@ -241,3 +241,14 @@ def test_simple_store_sees_other_writer(tmp_path):
     assert server.count() == 2  # 서버도 ingest가 쓴 b를 본다
     server.add(["c:0"], ["다"], [[1.0, 1.0]], [{"report_id": "c"}])
     assert {m["report_id"] for m in SimpleCollection(tmp_path / "v").metadatas} == {"a", "b", "c"}
+
+
+# ---------- 검색 조각에서 표 줄은 뺀다 ----------
+
+def test_page_chunks_skip_tables():
+    sec = "[p.3]\n본문 문장 하나\n\n[표 p.3-1] 교육 실적\n| 구분 | 이론 |\n|---|---|\n| 시간 | 16 |\n[p.4]\n본문 문장 둘"
+    chunks = search._page_chunks(sec)
+    text = "\n".join(t for t, _ in chunks)
+    assert "본문 문장 하나" in text and "본문 문장 둘" in text
+    assert "|" not in text and "[표" not in text
+    assert chunks[0][1] == 3

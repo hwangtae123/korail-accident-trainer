@@ -92,12 +92,15 @@ def embed(texts: list[str]) -> list[list[float]]:
 # ---------- 색인 ----------
 
 def _page_chunks(section: str) -> list[tuple[str, int | None]]:
-    """[p.N] 표시를 따라가며 쪽 번호를 기억하고, 글자 수 기준으로 자른다."""
+    """[p.N] 표시를 따라가며 쪽 번호를 기억하고, 글자 수 기준으로 자른다.
+    Markdown 표 줄("| … |")과 표 제목 줄("[표 …]")은 뺀다: 칸 나열이라 검색을 흐리고 화면 조각으로도 읽히지 않는다."""
     out, buf, page, buf_page = [], "", None, None
     for line in section.split("\n"):
         m = re.match(r"^\[p\.(\d+)\]$", line.strip())
         if m:
             page = int(m.group(1))
+            continue
+        if line.lstrip().startswith("|") or re.match(r"^\s*\[표", line):
             continue
         if not buf:
             buf_page = page
