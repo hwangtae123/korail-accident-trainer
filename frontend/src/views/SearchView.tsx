@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, type Schemas } from "../api/client";
 import { call, useLoad, type Result } from "../api/call";
-import { clip, Empty, ErrorBox, Loaded, Loading, LlmNotice, PageLink } from "../components/common";
+import { clip, Empty, ErrorBox, Loaded, Loading, LlmNotice, Md, PageLink } from "../components/common";
 import { go, href } from "../route";
 
 export default function SearchView({ q }: { q: string }) {
@@ -47,7 +47,7 @@ function Results({ q }: { q: string }) {
             {ans && ans !== "loading" && (ans.ok ? (
               <div className="answer">
                 <LlmNotice>검색 결과만 근거로 LLM이 쓴 요약입니다. 원문과 대조하세요.</LlmNotice>
-                <div className="pre">{ans.data.answer}</div>
+                <Md text={ans.data.answer} />
               </div>
             ) : <ErrorBox message={ans.message} onRetry={() => void ask()} />)}
           </div>

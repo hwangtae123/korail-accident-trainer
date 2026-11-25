@@ -102,3 +102,35 @@ export function fmtTime(iso?: string): string {
 }
 
 export const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s);
+
+/** LLM 답변용 아주 작은 Markdown 표시: 제목(#), 목록(- · *, 1.), **굵게**. HTML은 해석하지 않는다(글자 그대로). */
+export function Md({ text }: { text: string }) {
+  const inline = (s: string) =>
+    s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      part.startsWith("**") && part.endsWith("**") ? <b key={i}>{part.slice(2, -2)}</b> : part);
+  const blocks: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const flush = () => {
+    if (!list) return;
+    const items = list.items.map((it, i) => <li key={i}>{inline(it)}</li>);
+    blocks.push(list.ordered ? <ol key={blocks.length}>{items}</ol> : <ul key={blocks.length}>{items}</ul>);
+    list = null;
+  };
+  for (const raw of text.split("\n")) {
+    const line = raw.trimEnd();
+    const h = line.match(/^#{1,6}\s+(.*)$/);
+    const ul = line.match(/^\s*[-*·•]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ul || ol) {
+      const ordered = !!ol;
+      if (!list || list.ordered !== ordered) { flush(); list = { ordered, items: [] }; }
+      list.items.push((ul ?? ol)![1]);
+      continue;
+    }
+    flush();
+    if (h) blocks.push(<h4 key={blocks.length}>{inline(h[1])}</h4>);
+    else if (line.trim()) blocks.push(<p key={blocks.length}>{inline(line)}</p>);
+  }
+  flush();
+  return <div className="md">{blocks}</div>;
+}

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, type Briefing } from "../api/client";
 import { call, type Result } from "../api/call";
-import { Empty, ErrorBox, Loading, LlmNotice, NotReady, PageLink, Verified } from "../components/common";
+import { Empty, ErrorBox, Loading, LlmNotice, Md, NotReady, PageLink, Verified } from "../components/common";
 import { href } from "../route";
 
 export default function BriefingView() {
@@ -62,7 +62,7 @@ function Sheet({ b }: { b: Briefing }) {
         <>
           <h3>비슷한 과거 사고 요약</h3>
           <LlmNotice />
-          <div className="pre">{b.summary || "요약 없음"}</div>
+          <Md text={b.summary || "요약 없음"} />
 
           <h3>작업 전 확인 항목</h3>
           {b.checklist.length === 0 ? (

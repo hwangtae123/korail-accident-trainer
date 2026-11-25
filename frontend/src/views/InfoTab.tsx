@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { api, type AccidentRecord, type Schemas } from "../api/client";
 import { call, useLoad, type Result } from "../api/call";
-import { clip, Empty, ErrorBox, EvidenceLine, Loaded, Loading, LlmNotice, PageLink } from "../components/common";
+import { clip, Empty, ErrorBox, EvidenceLine, Loaded, Loading, LlmNotice, Md, PageLink } from "../components/common";
 import { href } from "../route";
 
 export default function InfoTab({ id, record: r }: { id: string; record: AccidentRecord }) {
@@ -142,7 +142,7 @@ function RelatedCard({ id }: { id: string }) {
             {summary && summary !== "loading" && (summary.ok ? (
               <div className="answer">
                 <LlmNotice>검색된 과거 사고 조각만 근거로 LLM이 쓴 요약입니다. 원문과 대조하세요.</LlmNotice>
-                <div className="pre">{summary.data.answer}</div>
+                <Md text={summary.data.answer} />
               </div>
             ) : <ErrorBox message={summary.message} onRetry={() => void compare()} />)}
           </>
