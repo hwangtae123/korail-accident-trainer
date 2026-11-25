@@ -26,6 +26,9 @@ SECTION_PATTERNS = {
 
 
 MIN_CHARS_PER_PAGE = 50  # 이보다 적으면 글자가 도형으로 그려진(스캔/아웃라인) PDF로 본다
+# 숫자·기호는 읽히는데 한글만 못 읽는 PDF도 있다 (글꼴에 문자 정보가 없음). 정상 보고서는 쪽당 한글 수백 자(중앙값 약 350).
+MIN_HANGUL_PER_PAGE = 30
+_HANGUL = re.compile(r"[가-힣]")
 
 
 class NeedsOCR(Exception):
@@ -88,15 +91,20 @@ def quick_text_check(pdf_path: str | Path, sample: int = 6) -> None:
     try:
         n = len(doc)
         idx = sorted({int(i * (n - 1) / max(1, sample - 1)) for i in range(min(sample, n))})
-        chars = 0
+        chars = hangul = 0
         for i in idx:
             tp = doc[i].get_textpage()
-            chars += len(re.sub(r"\s", "", tp.get_text_range()))
+            text = tp.get_text_range()
+            chars += len(re.sub(r"\s", "", text))
+            hangul += len(_HANGUL.findall(text))
             tp.close()
     finally:
         doc.close()
-    if chars / max(1, len(idx)) < MIN_CHARS_PER_PAGE:
-        raise NeedsOCR(f"텍스트 레이어 없음 (표본 쪽당 {chars // max(1, len(idx))}자)")
+    k = max(1, len(idx))
+    if chars / k < MIN_CHARS_PER_PAGE:
+        raise NeedsOCR(f"텍스트 레이어 없음 (표본 쪽당 {chars // k}자)")
+    if hangul / k < MIN_HANGUL_PER_PAGE:
+        raise NeedsOCR(f"한글을 읽을 수 없는 PDF — 글꼴에 문자 정보가 없음 (표본 쪽당 한글 {hangul // k}자, 전체 글자 {chars // k}자)")
 
 
 def parse_report(pdf_path: str | Path) -> ParsedReport:
