@@ -39,6 +39,7 @@ class NeedsOCR(Exception):
 class ParsedReport:
     pages: list[str]
     sections: dict[str, str] = field(default_factory=dict)
+    ocr: bool = False  # 글자를 읽을 수 없어 OCR(app/ocr.py)로 읽은 보고서
 
     @property
     def full_text(self) -> str:

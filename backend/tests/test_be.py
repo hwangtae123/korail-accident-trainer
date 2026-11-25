@@ -347,3 +347,56 @@ def test_in_request_processing_and_stale_heal(monkeypatch):
     monkeypatch.delenv("PROCESS_IN_REQUEST")
     store.write(rid, "status", {**st, "state": "parsing", "updated_at": old})
     assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "parsing"
+
+
+# ---------- OCR: 글자를 읽을 수 없는 PDF ----------
+
+def test_ocr_fallback_processes_unreadable_pdf(tmp_path):
+    from app import ocr
+    from tests.test_flow import PAGES, make_outlined_pdf
+
+    seen = []
+
+    def fake_ocr(png: bytes, pno: int) -> str:
+        assert png[:4] == b"\x89PNG"  # 쪽 이미지가 넘어온다
+        seen.append(pno)
+        lines = (PAGES * 2)[pno - 1]  # 3쪽짜리 PDF: 가상 보고서 앞 3쪽 내용 (테스트용, 실제 사고 아님)
+        filler = "본문 채움 문장: 테스트용 가상 보고서 쪽마다 한글이 충분히 있도록 넣은 문장입니다."
+        return "\n".join(lines + [filler])
+
+    client = _client(fake_llm)
+    ocr.set_stub(fake_ocr)
+    try:
+        pdf = tmp_path / "scan.pdf"
+        make_outlined_pdf(pdf)  # 글자 없이 선만 있는 PDF (스캔본 흉내)
+        rid = client.post("/api/reports", files={"file": ("scan.pdf", pdf.read_bytes(), "application/pdf")}).json()["id"]
+    finally:
+        ocr.set_stub(None)
+    st = client.get(f"/api/reports/{rid}").json()["status"]
+    assert st["state"] == "done" and st["message"].startswith("OCR로 읽음"), st
+    assert sorted(seen) == [1, 2, 3]
+    parsed = store.read(rid, "parsed")
+    assert parsed["ocr"] is True and parsed["pages"][1].startswith("[p.2]\n1. 사실정보")
+    assert {"facts", "timeline"} <= set(parsed["sections"])
+
+
+def test_ocr_needed_without_ocr_then_reprocessed_when_available(tmp_path):
+    from app import ocr
+    from tests.test_flow import make_outlined_pdf
+
+    client = _client(fake_llm)
+    pdf = tmp_path / "scan2.pdf"
+    make_outlined_pdf(pdf)
+    data = pdf.read_bytes() + b"\n% variant"  # 다른 테스트와 다른 id
+    rid = client.post("/api/reports", files={"file": ("s.pdf", data, "application/pdf")}).json()["id"]
+    assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "ocr_needed"  # OCR을 쓸 수 없음
+    assert client.post("/api/reports", files={"file": ("s.pdf", data, "application/pdf")}).json()["new"] is False
+
+    ocr.set_stub(lambda png, pno: "읽을 수 있는 한글이 거의 없는 쪽")  # OCR로도 한글이 부족
+    try:
+        again = client.post("/api/reports", files={"file": ("s.pdf", data, "application/pdf")}).json()
+    finally:
+        ocr.set_stub(None)
+    assert again["new"] is True  # 이제 OCR을 쓸 수 있으니 다시 처리
+    st = client.get(f"/api/reports/{rid}").json()["status"]
+    assert st["state"] == "ocr_needed" and "OCR로도" in st["message"]

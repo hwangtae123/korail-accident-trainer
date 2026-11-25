@@ -20,7 +20,7 @@ from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Qu
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
                          UploadResult, AppConfig, UploadUrlRequest, UploadUrlResult, ProcessRequest, ReportStatus)
 from .llm import LLMError
-from .pipeline import BUSY, heal, in_request, ingest_bytes, mark_interrupted, process
+from .pipeline import BUSY, heal, in_request, ingest_bytes, mark_interrupted, process, reprocessable
 from .rule_aliases import canonical_key
 from .schema import Scenario
 from .verify import verify_evidence
@@ -100,7 +100,7 @@ def upload_url(body: UploadUrlRequest):
     if store.backend() != "supabase":
         raise HTTPException(400, "직접 업로드는 Supabase 저장소에서만 쓴다 — POST /api/reports를 쓰세요")
     st = heal(body.id, store.read(body.id, "status")) or {}
-    if st.get("state") in {"done", "ocr_needed"} | BUSY and not st.get("uploading"):
+    if not reprocessable(st):
         return UploadUrlResult(id=body.id, new=False)
     from . import supa_storage
 
@@ -116,7 +116,7 @@ def process_uploaded(rid: str, body: ProcessRequest):
     st = _need(rid, "status")
     if st.get("state") in BUSY and not st.get("uploading"):
         return st  # 이미 다른 요청이 처리 중
-    if st.get("state") in {"done", "ocr_needed"}:
+    if st.get("state") == "done" or (st.get("state") == "ocr_needed" and not reprocessable(st)):
         return st
     from . import supa_storage
 
