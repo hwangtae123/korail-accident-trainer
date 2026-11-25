@@ -17,6 +17,9 @@
 - 쓸 수 있는 디스크는 `/tmp`뿐이라 `DATA_DIR=/tmp/accident-trainer` (PDF 사본·파서 작업 폴더, 지워져도 됨).
 
 배포: 저장소 루트에서 `vercel deploy --prod` (CLI 로그인·`vercel link` 필요).
+- **Vercel의 `DATABASE_URL`은 Transaction pooler(포트 6543)**로 둔다. Session pooler(5432)는 동시 연결이 15개로 제한되어,
+  함수 인스턴스가 여러 개 뜨면(처리 + 화면 폴링) 금방 차서 "max clients reached" 오류가 난다. 함수 인스턴스당 연결은
+  `DB_POOL_SIZE=2`(api/index.py). 로컬 스크립트는 Session pooler(5432)를 써도 된다.
 Vercel 환경변수(Production): `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`(이상 Sensitive),
 `LLM_PROVIDER`, `LLM_MODEL`, `EMBED_PROVIDER`, `EMBED_MODEL`. `VITE_API_BASE`·`CORS_*`는 같은 주소라 필요 없다.
 

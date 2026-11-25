@@ -15,5 +15,7 @@ os.environ.setdefault("PROCESS_IN_REQUEST", "1")
 os.environ.setdefault("DATA_DIR", "/tmp/accident-trainer")
 os.environ.setdefault("LAYOUT_PARSER_TIMEOUT", "200")
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+# 함수 인스턴스마다 DB 연결을 적게 (여러 인스턴스가 동시에 뜬다). DATABASE_URL은 Supabase Transaction pooler(6543)를 쓴다.
+os.environ.setdefault("DB_POOL_SIZE", "2")
 
 from app.main import app  # noqa: E402,F401

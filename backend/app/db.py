@@ -6,6 +6,7 @@ Docker 이미지도 작다.
 DATABASE_URL 예 (Supabase 대시보드 > Connect > Session pooler):
   postgresql://postgres.<project-ref>:<비밀번호>@aws-0-<region>.pooler.supabase.com:5432/postgres
   ※ Direct connection(db.<ref>.supabase.co)은 IPv6 전용이라 IPv4만 되는 호스팅에서는 Session pooler를 쓴다.
+  ※ 서버리스(Vercel)에서는 Transaction pooler(포트 6543)를 쓴다. Session pooler는 동시 연결 15개 제한에 금방 걸린다.
 SSL: 기본은 암호화만 하고 인증서는 검증하지 않는다 (libpq sslmode=require와 같음).
      DATABASE_SSL_ROOT_CERT=<Supabase CA 인증서 경로>를 주면 인증서까지 검증한다.
 """
