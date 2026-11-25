@@ -31,7 +31,7 @@ export default function App() {
         <a href="#/"><h1>사고사례 판단 훈련</h1></a>
         <span>철도 사고조사보고서 기반 교육 · 해커톤 프로토타입</span>
       </header>
-      <div className="wrap">
+      <div className={`wrap ${route.name === "home" ? "" : "has-view"}`}>
         <Sidebar route={route} reports={reports} onUploaded={refresh} onRetry={() => void reloadReports()} />
         <main>
           {route.name === "home" && (
