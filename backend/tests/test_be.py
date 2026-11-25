@@ -550,3 +550,38 @@ def test_ocr_falls_back_to_gemini(monkeypatch):
     assert ocr.enabled()
     assert ocr._read_page(b"\x89PNG fake", 1) == "Gemini가 읽은 글자"
     assert used == ["openai", "openai", "gemini"]
+
+
+# ---------- 임베딩: Gemini (무료 등급, 1536차원으로 맞춤) ----------
+
+def test_gemini_embed_uses_compat_endpoint_and_1536_dims(monkeypatch):
+    import openai
+
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            seen["client"] = kw
+            self.embeddings = self
+
+        def create(self, model, input, **kw):
+            seen.setdefault("calls", []).append((model, len(input), kw))
+            return type("R", (), {"data": [type("D", (), {"embedding": [0.0] * 1536})() for _ in input]})()
+
+    monkeypatch.setattr(openai, "OpenAI", FakeClient)
+    monkeypatch.setenv("EMBED_PROVIDER", "gemini")
+    monkeypatch.delenv("EMBED_MODEL", raising=False)
+    monkeypatch.delenv("EMBED_DIM", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-test")
+    out = search.embed([f"t{i}" for i in range(150)])
+    assert len(out) == 150
+    assert "generativelanguage.googleapis.com" in seen["client"]["base_url"]
+    assert [c[1] for c in seen["calls"]] == [100, 50]
+    assert all(c[0] == "gemini-embedding-001" and c[2] == {"dimensions": 1536} for c in seen["calls"])
+
+
+def test_gemini_embed_without_key_says_so(monkeypatch):
+    monkeypatch.setenv("EMBED_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        search.embed(["x"])

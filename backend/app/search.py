@@ -2,6 +2,8 @@
 
 임베딩은 직접 계산해서 넣는다 (Chroma 내장 임베딩 함수 대신). 공급자는 환경변수로 바꾼다.
 EMBED_PROVIDER=openai (기본)  EMBED_MODEL=text-embedding-3-small
+EMBED_PROVIDER=gemini         GEMINI_API_KEY, EMBED_MODEL (기본 gemini-embedding-001, 무료 등급), EMBED_DIM (기본 1536)
+                              DB(pgvector)가 1536차원이라 차원을 맞춘다. 공급자를 바꾸면 /api/reindex로 전부 다시 넣어야 한다.
 EMBED_PROVIDER=stub           키 없이 테스트 (글자 n-gram 해시)
 
 벡터 저장소는 VECTOR_STORE 환경변수로 고른다.
@@ -84,14 +86,25 @@ def embed(texts: list[str]) -> list[list[float]]:
     if provider == "stub":
         dim = int(os.getenv("STUB_EMBED_DIM", "256"))  # 실제 DB(1536차원)에서 시험할 때 차원을 맞춘다
         return [_stub_embed(t, dim) for t in texts]
-    if provider == "openai":
+    if provider in ("openai", "gemini"):
         from openai import OpenAI
 
-        client = OpenAI(base_url=os.getenv("EMBED_BASE_URL") or None)
-        model = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+        if provider == "gemini":
+            from .llm import GEMINI_BASE_URL
+
+            key = os.getenv("GEMINI_API_KEY")
+            if not key:
+                raise RuntimeError("EMBED_PROVIDER=gemini 인데 GEMINI_API_KEY가 없습니다")
+            client = OpenAI(api_key=key, base_url=os.getenv("GEMINI_BASE_URL") or GEMINI_BASE_URL, max_retries=4)
+            model = os.getenv("EMBED_MODEL") or "gemini-embedding-001"
+            extra = {"dimensions": int(os.getenv("EMBED_DIM", "1536"))}
+        else:
+            client = OpenAI(base_url=os.getenv("EMBED_BASE_URL") or None)
+            model = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+            extra = {}
         out = []
         for i in range(0, len(texts), 100):
-            resp = client.embeddings.create(model=model, input=texts[i:i + 100])
+            resp = client.embeddings.create(model=model, input=texts[i:i + 100], **extra)
             out += [d.embedding for d in resp.data]
         return out
     raise RuntimeError(f"알 수 없는 EMBED_PROVIDER: {provider}")
