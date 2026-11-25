@@ -1,0 +1,1510 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "사고사례 판단 훈련 API",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List Reports",
+        "description": "새로 접수된 순(ingested_at 내림차순).",
+        "operationId": "list_reports_api_reports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Reports Api Reports Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Upload",
+        "description": "PDF 업로드. 처리는 백그라운드로 돌고, 진행 상태는 GET /api/reports/{id}의 status.state로 본다.",
+        "operationId": "upload_api_reports_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_api_reports_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Report",
+        "operationId": "get_report_api_reports__rid__get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Pdf",
+        "description": "원문 PDF. 근거 쪽으로 바로 가려면 프론트에서 #page=N을 붙여 연다.",
+        "operationId": "get_pdf_api_reports__rid__pdf_get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/related": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Related",
+        "description": "이 사고와 비슷한 과거 사고 + 반복된 규정. 보고서가 늘면 결과도 바뀌도록 매번 계산한다.",
+        "operationId": "get_related_api_reports__rid__related_get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RelatedGroup"
+                  },
+                  "title": "Response Get Related Api Reports  Rid  Related Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/compare": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Compare",
+        "description": "과거 사고와의 공통점을 LLM이 검색 결과만 근거로 요약.",
+        "operationId": "compare_api_reports__rid__compare_post",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/scenario": {
+      "get": {
+        "tags": [
+          "scenario"
+        ],
+        "summary": "Get Scenario",
+        "operationId": "get_scenario_api_reports__rid__scenario_get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scenario"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "scenario"
+        ],
+        "summary": "Update Scenario",
+        "description": "[backlog BE-2] 교관이 고친 시나리오 저장. 저장하면 review_status는 '검수 전'으로 되돌린다.",
+        "operationId": "update_scenario_api_reports__rid__scenario_put",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Scenario"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scenario"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/scenario/regenerate": {
+      "post": {
+        "tags": [
+          "scenario"
+        ],
+        "summary": "Regenerate",
+        "operationId": "regenerate_api_reports__rid__scenario_regenerate_post",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/scenario/review": {
+      "post": {
+        "tags": [
+          "scenario"
+        ],
+        "summary": "Mark Reviewed",
+        "operationId": "mark_reviewed_api_reports__rid__scenario_review_post",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Stats",
+        "description": "여러 보고서에 걸친 반복 패턴: 사고유형, 지적된 규정, 교육 관련 지적.",
+        "operationId": "stats_api_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Similar",
+        "description": "상황 설명 -> 비슷한 과거 사고 (LLM 없이 검색만).",
+        "operationId": "similar_api_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SearchGroup"
+                  },
+                  "type": "array",
+                  "title": "Response Similar Api Search Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ask": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Ask",
+        "description": "검색 결과를 근거로 LLM이 요약 (반복 원인, 확인할 점).",
+        "operationId": "ask_api_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/briefing": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Briefing",
+        "description": "[backlog BE-3] 작업 전 안전 브리핑(TBM) 1장: 비슷한 과거 사고 + 권고 기반 확인 항목.",
+        "operationId": "briefing_api_briefing_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Briefing"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reindex": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Reindex",
+        "operationId": "reindex_api_reindex_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccidentRecord": {
+        "properties": {
+          "report_no": {
+            "type": "string",
+            "title": "Report No",
+            "description": "보고서 번호 (예: ARAIB/R 2026-8)",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At",
+            "description": "발생 일시",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "default": ""
+          },
+          "accident_type": {
+            "type": "string",
+            "enum": [
+              "충돌",
+              "탈선",
+              "열차화재",
+              "사상",
+              "건널목",
+              "철도안전사고",
+              "기타"
+            ],
+            "title": "Accident Type",
+            "default": "기타"
+          },
+          "vehicles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vehicles",
+            "description": "관련 열차·차량·장비"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "사고 개요 2~3문장"
+          },
+          "damage": {
+            "type": "string",
+            "title": "Damage",
+            "default": ""
+          },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEvent"
+            },
+            "type": "array",
+            "title": "Timeline"
+          },
+          "direct_causes": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "Direct Causes"
+          },
+          "contributing_factors": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "Contributing Factors"
+          },
+          "violated_rules": {
+            "items": {
+              "$ref": "#/components/schemas/ViolatedRule"
+            },
+            "type": "array",
+            "title": "Violated Rules"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/Recommendation"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "training_findings": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "Training Findings",
+            "description": "교육·훈련 관련 조사결과"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "summary"
+        ],
+        "title": "AccidentRecord"
+      },
+      "AskResult": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "groups"
+        ],
+        "title": "AskResult"
+      },
+      "Body_upload_api_reports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_api_reports_post"
+      },
+      "Briefing": {
+        "properties": {
+          "work": {
+            "type": "string",
+            "title": "Work"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "비슷한 과거 사고 요약 (근거 [제목 p.N] 포함)"
+          },
+          "checklist": {
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            },
+            "type": "array",
+            "title": "Checklist"
+          },
+          "similar": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroup"
+            },
+            "type": "array",
+            "title": "Similar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "work",
+          "summary",
+          "checklist",
+          "similar"
+        ],
+        "title": "Briefing"
+      },
+      "BriefingRequest": {
+        "properties": {
+          "work": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Work",
+            "description": "오늘 할 작업 설명 (장소, 작업 종류, 장비)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "work"
+        ],
+        "title": "BriefingRequest"
+      },
+      "ChecklistItem": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "작업 전 확인할 항목 (과거 안전권고·기여요인에서 도출)"
+          },
+          "source_report_id": {
+            "type": "string",
+            "title": "Source Report Id"
+          },
+          "source_title": {
+            "type": "string",
+            "title": "Source Title"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "source_report_id",
+          "source_title",
+          "evidence"
+        ],
+        "title": "ChecklistItem"
+      },
+      "Evidence": {
+        "properties": {
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "근거가 있는 보고서 쪽 번호"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "description": "원문에서 근거가 되는 짧은 구절 (40자 이내)",
+            "default": ""
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified",
+            "description": "quote가 해당 쪽 원문에 실제로 있는지 코드로 대조한 결과. null = 아직 확인 안 함"
+          }
+        },
+        "type": "object",
+        "title": "Evidence",
+        "description": "모든 추출 항목에 붙는 근거. 사람이 원문과 대조할 수 있게 쪽 번호를 남긴다."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Item": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence",
+            "default": {
+              "quote": ""
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Item"
+      },
+      "NameCount": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "count"
+        ],
+        "title": "NameCount"
+      },
+      "Ok": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "Ok"
+      },
+      "Option": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "Option"
+      },
+      "Query": {
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Q"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q"
+        ],
+        "title": "Query"
+      },
+      "Recommendation": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "권고 대상 기관"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence",
+            "default": {
+              "quote": ""
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "text"
+        ],
+        "title": "Recommendation"
+      },
+      "ReindexResult": {
+        "properties": {
+          "indexed": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Indexed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indexed"
+        ],
+        "title": "ReindexResult"
+      },
+      "RelatedGroup": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "보고서 안에서 가장 가까운 조각의 코사인 유사도"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "shared_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Shared Rules",
+            "description": "이번 사고에서도 지적된 같은 규정"
+          },
+          "accident_type": {
+            "type": "string",
+            "title": "Accident Type",
+            "default": ""
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "title",
+          "score",
+          "hits"
+        ],
+        "title": "RelatedGroup"
+      },
+      "ReportDetail": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ReportStatus"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccidentRecord"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "구조화가 끝나기 전에는 null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ReportDetail"
+      },
+      "ReportStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "extracting",
+              "indexing",
+              "scenario",
+              "done",
+              "error",
+              "ocr_needed"
+            ],
+            "title": "State"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "ingested_at": {
+            "type": "string",
+            "title": "Ingested At",
+            "description": "접수 시각 ISO 8601 (마이크로초까지)",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "ReportStatus"
+      },
+      "ReportSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReportStatus"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "report_no": {
+            "type": "string",
+            "title": "Report No",
+            "default": ""
+          },
+          "accident_type": {
+            "type": "string",
+            "title": "Accident Type",
+            "default": ""
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At",
+            "default": ""
+          },
+          "ingested_at": {
+            "type": "string",
+            "title": "Ingested At",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "title"
+        ],
+        "title": "ReportSummary"
+      },
+      "Scenario": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "교육생이 맡는 역할 (예: 장비 운전원)"
+          },
+          "intro": {
+            "type": "string",
+            "title": "Intro"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "debrief": {
+            "type": "string",
+            "title": "Debrief",
+            "description": "마무리: 사고원인과 교훈 요약"
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "검수 전",
+              "검수 완료"
+            ],
+            "title": "Review Status",
+            "default": "검수 전"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "role",
+          "intro",
+          "steps",
+          "debrief"
+        ],
+        "title": "Scenario"
+      },
+      "ScenarioStep": {
+        "properties": {
+          "situation": {
+            "type": "string",
+            "title": "Situation",
+            "description": "이 단계에서 교육생이 마주한 상황"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "answer_id": {
+            "type": "string",
+            "title": "Answer Id"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "올바른 판단과 그 이유"
+          },
+          "rule_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rule Refs",
+            "description": "근거 규정"
+          },
+          "what_happened": {
+            "type": "string",
+            "title": "What Happened",
+            "description": "실제 사고에서는 어떻게 했고 어떤 결과로 이어졌는지"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence",
+            "default": {
+              "quote": ""
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "situation",
+          "question",
+          "options",
+          "answer_id",
+          "explanation",
+          "what_happened"
+        ],
+        "title": "ScenarioStep"
+      },
+      "SearchGroup": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "보고서 안에서 가장 가까운 조각의 코사인 유사도"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "type": "array",
+            "title": "Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "title",
+          "score",
+          "hits"
+        ],
+        "title": "SearchGroup"
+      },
+      "SearchHit": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "개요 | 경위 | 직접원인 | 기여요인 | 규정 | 안전권고 | 교육지적 | 본문"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "text",
+          "score"
+        ],
+        "title": "SearchHit"
+      },
+      "Stats": {
+        "properties": {
+          "reports": {
+            "type": "integer",
+            "title": "Reports"
+          },
+          "accident_types": {
+            "items": {
+              "$ref": "#/components/schemas/NameCount"
+            },
+            "type": "array",
+            "title": "Accident Types"
+          },
+          "violated_rules": {
+            "items": {
+              "$ref": "#/components/schemas/NameCount"
+            },
+            "type": "array",
+            "title": "Violated Rules"
+          },
+          "training_findings": {
+            "items": {
+              "$ref": "#/components/schemas/TrainingFinding"
+            },
+            "type": "array",
+            "title": "Training Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reports",
+          "accident_types",
+          "violated_rules",
+          "training_findings"
+        ],
+        "title": "Stats"
+      },
+      "TimelineEvent": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "title": "Time",
+            "description": "시각 (보고서에 있을 때만, 예: 02:16)",
+            "default": ""
+          },
+          "event": {
+            "type": "string",
+            "title": "Event"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence",
+            "default": {
+              "quote": ""
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "TimelineEvent"
+      },
+      "TrainingFinding": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "report": {
+            "type": "string",
+            "title": "Report"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "report",
+          "text"
+        ],
+        "title": "TrainingFinding"
+      },
+      "UploadResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "new": {
+            "type": "boolean",
+            "title": "New",
+            "description": "false면 같은 파일이 이미 있어서 다시 처리하지 않음"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "new"
+        ],
+        "title": "UploadResult"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ViolatedRule": {
+        "properties": {
+          "rule_name": {
+            "type": "string",
+            "title": "Rule Name",
+            "description": "규정·지침 이름 (예: 선로유지관리지침)"
+          },
+          "article": {
+            "type": "string",
+            "title": "Article",
+            "description": "조·항 (보고서에 있을 때만)",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "무엇을 지키지 않았는지"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence",
+            "default": {
+              "quote": ""
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_name",
+          "description"
+        ],
+        "title": "ViolatedRule"
+      }
+    }
+  }
+}
