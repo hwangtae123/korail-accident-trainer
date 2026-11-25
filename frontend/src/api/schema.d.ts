@@ -133,7 +133,8 @@ export interface paths {
         get: operations["get_scenario_api_reports__rid__scenario_get"];
         /**
          * Update Scenario
-         * @description [backlog BE-2] 교관이 고친 시나리오 저장. 저장하면 review_status는 '검수 전'으로 되돌린다.
+         * @description 교관이 고친 시나리오 저장. 저장하면 review_status는 '검수 전'으로 되돌린다.
+         *     각 단계의 answer_id가 그 단계 선택지 id 중 하나가 아니면 422.
          */
         put: operations["update_scenario_api_reports__rid__scenario_put"];
         post?: never;
@@ -248,7 +249,8 @@ export interface paths {
         put?: never;
         /**
          * Briefing
-         * @description [backlog BE-3] 작업 전 안전 브리핑(TBM) 1장: 비슷한 과거 사고 + 권고 기반 확인 항목.
+         * @description 작업 전 안전 브리핑(TBM) 1장: 비슷한 과거 사고 3건 + 그 안전권고·기여요인에서 뽑은 확인 항목.
+         *     확인 항목의 출처는 검색된 보고서로 코드가 검증한다. 색인된 보고서가 없으면 빈 결과.
          */
         post: operations["briefing_api_briefing_post"];
         delete?: never;
