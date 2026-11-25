@@ -89,3 +89,32 @@ def test_pipeline_fills_verified():
     assert [c["evidence"]["verified"] for c in rec["direct_causes"]] == [True, False, None]
     # 시나리오 근거도 확인된다 (fake_llm: p.4 "테스트")
     assert client.get(f"/api/reports/{rid}/scenario").json()["steps"][0]["evidence"]["verified"] is True
+
+
+# ---------- BE-2 시나리오 저장 API ----------
+
+def test_put_scenario():
+    client = _client(fake_llm)
+    rid = _upload(client, "S")
+    assert client.post(f"/api/reports/{rid}/scenario/review").json()["ok"]
+    sc = client.get(f"/api/reports/{rid}/scenario").json()
+    assert sc["review_status"] == "검수 완료"
+
+    sc["intro"] = "교관이 고친 도입 (테스트)"
+    sc["steps"][0]["options"].append({"id": "C", "text": "새 선택지"})
+    sc["steps"][0]["answer_id"] = "C"
+    res = client.put(f"/api/reports/{rid}/scenario", json=sc)
+    assert res.status_code == 200, res.text
+    assert res.json()["review_status"] == "검수 전"  # 고치면 다시 검수 전
+
+    got = client.get(f"/api/reports/{rid}/scenario").json()
+    assert got["intro"] == "교관이 고친 도입 (테스트)" and got["steps"][0]["answer_id"] == "C"
+    assert got["review_status"] == "검수 전"
+
+    bad = json.loads(json.dumps(sc))
+    bad["steps"][0]["answer_id"] = "Z"
+    res = client.put(f"/api/reports/{rid}/scenario", json=bad)
+    assert res.status_code == 422 and "Z" in res.json()["detail"]
+    assert client.get(f"/api/reports/{rid}/scenario").json()["steps"][0]["answer_id"] == "C"  # 저장 안 됨
+
+    assert client.put("/api/reports/nope000000/scenario", json=sc).status_code == 404

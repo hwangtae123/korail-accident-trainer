@@ -18,6 +18,7 @@ from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Qu
                          UploadResult)
 from .pipeline import ingest_bytes, mark_interrupted, process
 from .schema import Scenario
+from .verify import verify_evidence
 
 load_dotenv()
 
@@ -118,8 +119,24 @@ def get_scenario(rid: str):
 
 @app.put("/api/reports/{rid}/scenario", response_model=Scenario, tags=["scenario"])
 def update_scenario(rid: str, body: Scenario):
-    """[backlog BE-2] 교관이 고친 시나리오 저장. 저장하면 review_status는 '검수 전'으로 되돌린다."""
-    raise HTTPException(501, "아직 구현 전 (docs/backlog.md BE-2)")
+    """교관이 고친 시나리오 저장. 저장하면 review_status는 '검수 전'으로 되돌린다.
+    각 단계의 answer_id가 그 단계 선택지 id 중 하나가 아니면 422."""
+    _need(rid, "status")
+    problems = []
+    for n, step in enumerate(body.steps, start=1):
+        ids = [o.id for o in step.options]
+        if len(set(ids)) != len(ids):
+            problems.append(f"{n}단계: 선택지 id가 겹침 ({', '.join(ids)})")
+        if step.answer_id not in ids:
+            problems.append(f"{n}단계: 정답 '{step.answer_id}'이(가) 선택지 id({', '.join(ids)})에 없음")
+    if problems:
+        raise HTTPException(422, "; ".join(problems))
+    body.review_status = "검수 전"
+    parsed = store.read(rid, "parsed")
+    if parsed:
+        verify_evidence(body, parsed.get("pages", []))
+    store.write(rid, "scenario", body.model_dump())
+    return body
 
 
 @app.post("/api/reports/{rid}/scenario/regenerate", response_model=Ok, tags=["scenario"])
