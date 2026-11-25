@@ -15,9 +15,13 @@
    - `SUPABASE_URL`: Project Settings > API > Project URL
    - `SUPABASE_SERVICE_ROLE_KEY`: Project Settings > API > service_role 키
 2. 테이블·pgvector·비공개 버킷 만들기 (둘 중 하나)
+   - Supabase CLI(로그인·`supabase link`된 폴더에서): `supabase db query --linked --yes -f backend/supabase/schema.sql`
    - `backend/`에서 `python scripts/init_db.py`
    - 또는 `backend/supabase/schema.sql`을 SQL Editor에 붙여 넣고 실행
-3. 연동 시험: `TEST_DATABASE_URL`을 `DATABASE_URL`과 같은 값으로 주고 `python -m pytest -q tests/test_supabase.py`
+3. (권장) 앱 전용 역할: `backend/supabase/app_role.sql`의 `:'app_password'`를 새 비밀번호로 바꿔 실행하고,
+   `DATABASE_URL`을 `postgresql://accident_trainer.<ref>:<비밀번호>@<pooler 호스트>:5432/postgres`로 둔다.
+   postgres(관리자) 비밀번호 없이 reports·report_chunks만 읽고 쓰는 최소 권한 접속이다.
+4. 연동 시험: `TEST_DATABASE_URL`을 `DATABASE_URL`과 같은 값으로 주고 `python -m pytest -q tests/test_supabase.py`
 
 ## 2. 로컬에서 처리해 둔 보고서 옮기기 (선택)
 `backend/`에서 `python scripts/migrate_to_supabase.py`
