@@ -110,12 +110,19 @@ def read(rid: str, name: str):
         return None
 
 
-def set_status(rid: str, state: str, message: str = "", filename: str | None = None) -> None:
+def set_status(rid: str, state: str, message: str = "", filename: str | None = None, uploading: bool = False) -> None:
+    """상태를 바꾼다. updated_at은 서버리스에서 멈춘 처리를 알아내는 데 쓴다 (pipeline.heal).
+    uploading=True: 브라우저가 Storage에 PDF를 올리는 중 (아직 처리 전)."""
     cur = read(rid, "status") or {}
-    cur.update({"state": state, "message": message})
+    now = datetime.now().isoformat(timespec="microseconds")
+    cur.update({"state": state, "message": message, "updated_at": now})
     if filename:
         cur["filename"] = filename
-    cur.setdefault("ingested_at", datetime.now().isoformat(timespec="microseconds"))
+    if uploading:
+        cur["uploading"] = True
+    else:
+        cur.pop("uploading", None)
+    cur.setdefault("ingested_at", now)
     write(rid, "status", cur)
 
 

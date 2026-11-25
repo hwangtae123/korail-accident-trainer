@@ -24,9 +24,13 @@ export default function TrainingTab({ id, reportState, hasRecord, onRegenerated 
 
   async function regenerate() {
     if (!window.confirm("시나리오를 다시 생성할까요? 지금 시나리오(교관이 고친 내용 포함)는 새 초안으로 바뀝니다.")) return;
-    const r = await call(api.POST("/api/reports/{rid}/scenario/regenerate", { params: { path: { rid: id } } }));
-    setMsg(r.ok ? null : r.message);
-    if (r.ok) onRegenerated();
+    // 서버리스에서는 이 요청이 생성이 끝날 때까지(수십 초) 열려 있다. 기다리지 않고 상태 폴링으로 진행을 본다.
+    const pending = call(api.POST("/api/reports/{rid}/scenario/regenerate", { params: { path: { rid: id } } }));
+    setMsg(null);
+    window.setTimeout(onRegenerated, 800);
+    const r = await pending;
+    if (!r.ok) setMsg(r.message);
+    onRegenerated();
   }
 
   async function markReviewed() {

@@ -41,6 +41,27 @@ class UploadResult(BaseModel):
     new: bool = Field(description="false면 같은 파일이 이미 있어서 다시 처리하지 않음")
 
 
+class AppConfig(BaseModel):
+    direct_upload: bool = Field(description="true면 PDF를 Supabase Storage에 직접 올린다 (upload-url -> PUT -> process). "
+                                            "false면 POST /api/reports (multipart)")
+    max_upload_mb: int = Field(description="올릴 수 있는 PDF 최대 크기 (MB)")
+
+
+class UploadUrlRequest(BaseModel):
+    id: str = Field(pattern=r"^[0-9a-f]{10}$", description="PDF 내용 SHA-1 앞 10자리 (서버가 처리 전에 다시 계산해 확인)")
+    filename: str = Field("", max_length=300)
+
+
+class UploadUrlResult(BaseModel):
+    id: str
+    new: bool = Field(description="false면 같은 파일이 이미 있어서 올리지도 처리하지도 않는다")
+    upload_url: Optional[str] = Field(None, description="new일 때만: 이 주소로 PDF를 PUT (Content-Type: application/pdf)")
+
+
+class ProcessRequest(BaseModel):
+    filename: str = Field("", max_length=300)
+
+
 class Ok(BaseModel):
     ok: bool = True
 

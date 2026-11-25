@@ -45,6 +45,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Config
+         * @description 화면이 업로드 방식을 고른다. Supabase를 쓰면 PDF를 Storage에 직접 올린다 (서버리스 함수의 요청 크기 제한을 피함).
+         */
+        get: operations["config_api_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Url
+         * @description 직접 업로드 1단계: 같은 파일이 이미 있으면 new=false. 아니면 Storage에 PUT할 1회용 주소를 준다.
+         *     다음: 그 주소로 PDF를 PUT -> POST /api/reports/{id}/process.
+         */
+        post: operations["upload_url_api_reports_upload_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{rid}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process Uploaded
+         * @description 직접 업로드 2단계: Storage에 올라간 PDF를 확인(PDF인지, 내용 해시가 id와 같은지)하고 끝까지 처리한다.
+         *     서버리스에서는 이 요청 안에서 처리한다 (1~2분). 화면은 이 응답을 기다리지 않고 GET /api/reports/{id}로 진행을 본다.
+         */
+        post: operations["process_uploaded_api_reports__rid__process_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/{rid}": {
         parameters: {
             query?: never;
@@ -338,6 +400,19 @@ export interface components {
              */
             training_findings?: components["schemas"]["Item"][];
         };
+        /** AppConfig */
+        AppConfig: {
+            /**
+             * Direct Upload
+             * @description true면 PDF를 Supabase Storage에 직접 올린다 (upload-url -> PUT -> process). false면 POST /api/reports (multipart)
+             */
+            direct_upload: boolean;
+            /**
+             * Max Upload Mb
+             * @description 올릴 수 있는 PDF 최대 크기 (MB)
+             */
+            max_upload_mb: number;
+        };
         /** AskResult */
         AskResult: {
             /** Answer */
@@ -444,6 +519,14 @@ export interface components {
             id: string;
             /** Text */
             text: string;
+        };
+        /** ProcessRequest */
+        ProcessRequest: {
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
         };
         /** Query */
         Query: {
@@ -695,6 +778,34 @@ export interface components {
              */
             new: boolean;
         };
+        /** UploadUrlRequest */
+        UploadUrlRequest: {
+            /**
+             * Id
+             * @description PDF 내용 SHA-1 앞 10자리 (서버가 처리 전에 다시 계산해 확인)
+             */
+            id: string;
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+        };
+        /** UploadUrlResult */
+        UploadUrlResult: {
+            /** Id */
+            id: string;
+            /**
+             * New
+             * @description false면 같은 파일이 이미 있어서 올리지도 처리하지도 않는다
+             */
+            new: boolean;
+            /**
+             * Upload Url
+             * @description new일 때만: 이 주소로 PDF를 PUT (Content-Type: application/pdf)
+             */
+            upload_url?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -802,6 +913,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    config_api_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppConfig"];
+                };
+            };
+        };
+    };
+    upload_url_api_reports_upload_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadUrlResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    process_uploaded_api_reports__rid__process_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportStatus"];
                 };
             };
             /** @description Validation Error */

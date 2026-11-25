@@ -309,3 +309,41 @@ def test_cors_allows_vercel_origins():
     allowed = out.stdout.split()[-4:]
     assert allowed == ["https://accident-trainer.vercel.app", "https://accident-trainer-git-main-team.vercel.app",
                        "None", "https://kr.example.org"], out.stdout
+
+
+# ---------- 서버리스(Vercel) 처리 방식 ----------
+
+def test_config_and_upload_url_in_file_mode():
+    client = _client(fake_llm)
+    assert client.get("/api/config").json()["direct_upload"] is False
+    r = client.post("/api/reports/upload-url", json={"id": "0123456789", "filename": "a.pdf"})
+    assert r.status_code == 400
+    assert client.post("/api/reports/upload-url", json={"id": "not-hex!!", "filename": "a.pdf"}).status_code == 422
+
+
+def test_in_request_processing_and_stale_heal(monkeypatch):
+    from datetime import datetime, timedelta
+
+    from app import pipeline
+
+    monkeypatch.setenv("PROCESS_IN_REQUEST", "1")
+    client = _client(fake_llm)
+    rid = _upload(client, "R")  # 요청 안에서 끝까지 처리된다
+    assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "done"
+
+    # 함수가 시간 제한에 걸려 '처리 중'으로 멈춘 상황
+    old = (datetime.now() - timedelta(seconds=pipeline.STALE_SEC + 5)).isoformat()
+    st = store.read(rid, "status")
+    store.write(rid, "status", {**st, "state": "extracting", "updated_at": old})
+    got = client.get(f"/api/reports/{rid}").json()["status"]
+    assert got["state"] == "error" and "시간이 초과" in got["message"]
+    # 업로드 도중 멈춘 상황
+    store.write(rid, "status", {**st, "state": "queued", "uploading": True, "updated_at": old})
+    assert "업로드가 끝나지 않았습니다" in client.get("/api/reports").json()[0]["status"]["message"]
+    # 방금 바뀐 '처리 중'은 그대로
+    store.write(rid, "status", {**st, "state": "parsing", "updated_at": datetime.now().isoformat()})
+    assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "parsing"
+    # 서버 모드(PROCESS_IN_REQUEST 없음)에서는 건드리지 않는다
+    monkeypatch.delenv("PROCESS_IN_REQUEST")
+    store.write(rid, "status", {**st, "state": "parsing", "updated_at": old})
+    assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "parsing"

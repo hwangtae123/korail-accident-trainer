@@ -82,7 +82,8 @@ def _stub_embed(text: str, dim: int = 256) -> list[float]:
 def embed(texts: list[str]) -> list[list[float]]:
     provider = os.getenv("EMBED_PROVIDER", "openai").lower()
     if provider == "stub":
-        return [_stub_embed(t) for t in texts]
+        dim = int(os.getenv("STUB_EMBED_DIM", "256"))  # 실제 DB(1536차원)에서 시험할 때 차원을 맞춘다
+        return [_stub_embed(t, dim) for t in texts]
     if provider == "openai":
         from openai import OpenAI
 

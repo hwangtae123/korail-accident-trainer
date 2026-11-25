@@ -1,0 +1,17 @@
+# Vercel Python 함수(api/index.py)가 설치하는 실행용 패키지. 로컬 개발·테스트는 backend/requirements.txt.
+fastapi
+python-multipart
+python-dotenv
+pydantic>=2
+anthropic
+openai
+numpy
+pg8000
+httpx
+pyyaml
+# 레이아웃 파서(parser/)가 검증한 버전
+pdfplumber==0.11.10
+pdfminer.six==20260107
+pypdfium2==5.13.0
+Pillow==12.3.0
+PyYAML==6.0.3

@@ -30,6 +30,17 @@ def upload(path: str, data: bytes, content_type: str = "application/pdf") -> Non
         raise RuntimeError(f"Supabase Storage 업로드 실패 ({r.status_code}): {r.text[:300]}")
 
 
+def signed_upload_url(path: str) -> str:
+    """브라우저가 서버를 거치지 않고 PDF를 바로 올릴 1회용 주소 (Vercel 함수의 요청 크기 제한을 피하려고)."""
+    base, key, bucket = _conf()
+    r = httpx.post(f"{base}/storage/v1/object/upload/sign/{bucket}/{path}", timeout=30,
+                   headers=_headers(key, **{"x-upsert": "true"}))
+    if r.status_code >= 300:
+        raise RuntimeError(f"Supabase Storage 업로드 주소 발급 실패 ({r.status_code}): {r.text[:300]}")
+    rel = r.json().get("url") or ""
+    return f"{base}/storage/v1{rel}"
+
+
 def download(path: str) -> bytes | None:
     """없으면 None."""
     base, key, bucket = _conf()

@@ -10,6 +10,8 @@ import uuid
 
 import pytest
 
+from tests.test_flow import fake_llm, make_pdf  # 먼저 불러 둔다 (모듈이 처음 불릴 때 DATABASE_URL을 비우므로)
+
 from app import db, store
 from app.vectorstore import PgCollection
 
@@ -78,3 +80,43 @@ def test_pdf_storage(supa, tmp_path, monkeypatch):
 
     httpx.delete(f"{base}/storage/v1/object/{bucket}/{rid}/report.pdf",
                  headers={"Authorization": f"Bearer {key}", "apikey": key})
+
+
+@pytest.mark.skipif(not (os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+                    reason="SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 없음")
+def test_direct_upload_flow(supa, tmp_path, monkeypatch):
+    """Vercel 방식: upload-url -> Storage에 PUT -> process (요청 안에서 끝까지). 가짜 LLM, 1536차원 가짜 임베딩."""
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from app import llm, search, supa_storage
+    from app.main import app
+
+    monkeypatch.setenv("PROCESS_IN_REQUEST", "1")
+    monkeypatch.setenv("STUB_EMBED_DIM", "1536")
+    monkeypatch.setenv("VECTOR_STORE", "auto")
+    search.reset_client()
+    llm.set_stub(fake_llm)
+    pdf = tmp_path / "direct.pdf"
+    make_pdf(pdf, "D")
+    data = pdf.read_bytes()
+    rid = store.report_id(data)
+    client = TestClient(app)
+    try:
+        assert client.get("/api/config").json()["direct_upload"] is True
+        r = client.post("/api/reports/upload-url", json={"id": rid, "filename": "테스트용 가상 보고서 D.pdf"}).json()
+        assert r["new"] and r["upload_url"]
+        assert client.get(f"/api/reports/{rid}").json()["status"]["state"] == "queued"
+        assert httpx.put(r["upload_url"], content=data, headers={"Content-Type": "application/pdf"}, timeout=60).status_code == 200
+        st = client.post(f"/api/reports/{rid}/process", json={"filename": "테스트용 가상 보고서 D.pdf"}).json()
+        assert st["state"] == "done", st
+        assert client.get(f"/api/reports/{rid}").json()["record"]["title"] == "테스트용 가상 보고서 D"
+        assert db.run("select count(*) from public.report_chunks where report_id = :r", r=rid)[0][0] > 0
+        # 같은 파일을 다시 올리면 new=false
+        assert client.post("/api/reports/upload-url", json={"id": rid, "filename": "x.pdf"}).json()["new"] is False
+    finally:
+        db.run("delete from public.reports where id = :r", r=rid)
+        base, key, bucket = supa_storage._conf()
+        httpx.delete(f"{base}/storage/v1/object/{bucket}/{rid}/report.pdf",
+                     headers={"Authorization": f"Bearer {key}", "apikey": key})
+        search.reset_client()

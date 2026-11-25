@@ -216,8 +216,10 @@ class PgCollection:
         for q in query_embeddings:
             rows = self.db.run(
                 "select id, text, report_id, title, kind, page, embedding <=> cast(:q as vector) as dist "
-                f"from public.report_chunks {cond} order by dist limit :n",
-                q=self._vec(q), n=int(n_results), **params)
+                # 차원이 다른 조각(임베딩 모델을 바꾸기 전 것)은 비교할 수 없으므로 뺀다 (섞여 있으면 pgvector가 오류를 낸다)
+                f"from public.report_chunks {cond} {'and' if cond else 'where'} vector_dims(embedding) = :dims "
+                "order by dist limit :n",
+                q=self._vec(q), n=int(n_results), dims=len(q), **params)
             out["ids"].append([r[0] for r in rows])
             out["documents"].append([r[1] for r in rows])
             out["metadatas"].append([{"report_id": r[2], "title": r[3], "kind": r[4],

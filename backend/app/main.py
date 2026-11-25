@@ -11,15 +11,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import briefing as briefing_mod
 from . import search, store, watch
 from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Query, RelatedGroup,
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
-                         UploadResult)
+                         UploadResult, AppConfig, UploadUrlRequest, UploadUrlResult, ProcessRequest, ReportStatus)
 from .llm import LLMError
-from .pipeline import ingest_bytes, mark_interrupted, process
+from .pipeline import BUSY, heal, in_request, ingest_bytes, mark_interrupted, process
 from .rule_aliases import canonical_key
 from .schema import Scenario
 from .verify import verify_evidence
@@ -76,8 +77,60 @@ async def upload(file: UploadFile, bg: BackgroundTasks):
         raise HTTPException(400, "PDF 파일만 올릴 수 있습니다")
     rid, is_new = ingest_bytes(data, file.filename or "report.pdf")
     if is_new:
-        bg.add_task(process, rid)
+        if in_request():  # 서버리스: 응답 뒤 작업이 보장되지 않으므로 요청 안에서 끝낸다
+            await run_in_threadpool(process, rid)
+        else:
+            bg.add_task(process, rid)
     return UploadResult(id=rid, new=is_new)
+
+
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "50"))
+
+
+@app.get("/api/config", response_model=AppConfig, tags=["system"])
+def config():
+    """화면이 업로드 방식을 고른다. Supabase를 쓰면 PDF를 Storage에 직접 올린다 (서버리스 함수의 요청 크기 제한을 피함)."""
+    return AppConfig(direct_upload=store.backend() == "supabase", max_upload_mb=MAX_UPLOAD_MB)
+
+
+@app.post("/api/reports/upload-url", response_model=UploadUrlResult, tags=["reports"])
+def upload_url(body: UploadUrlRequest):
+    """직접 업로드 1단계: 같은 파일이 이미 있으면 new=false. 아니면 Storage에 PUT할 1회용 주소를 준다.
+    다음: 그 주소로 PDF를 PUT -> POST /api/reports/{id}/process."""
+    if store.backend() != "supabase":
+        raise HTTPException(400, "직접 업로드는 Supabase 저장소에서만 쓴다 — POST /api/reports를 쓰세요")
+    st = heal(body.id, store.read(body.id, "status")) or {}
+    if st.get("state") in {"done", "ocr_needed"} | BUSY and not st.get("uploading"):
+        return UploadUrlResult(id=body.id, new=False)
+    from . import supa_storage
+
+    url = supa_storage.signed_upload_url(f"{body.id}/{store.PDF_NAME}")
+    store.set_status(body.id, "queued", "PDF 올리는 중", filename=body.filename or "report.pdf", uploading=True)
+    return UploadUrlResult(id=body.id, new=True, upload_url=url)
+
+
+@app.post("/api/reports/{rid}/process", response_model=ReportStatus, tags=["reports"])
+def process_uploaded(rid: str, body: ProcessRequest):
+    """직접 업로드 2단계: Storage에 올라간 PDF를 확인(PDF인지, 내용 해시가 id와 같은지)하고 끝까지 처리한다.
+    서버리스에서는 이 요청 안에서 처리한다 (1~2분). 화면은 이 응답을 기다리지 않고 GET /api/reports/{id}로 진행을 본다."""
+    st = _need(rid, "status")
+    if st.get("state") in BUSY and not st.get("uploading"):
+        return st  # 이미 다른 요청이 처리 중
+    if st.get("state") in {"done", "ocr_needed"}:
+        return st
+    from . import supa_storage
+
+    data = supa_storage.download(f"{rid}/{store.PDF_NAME}")
+    if data is None:
+        store.set_status(rid, "error", "올린 PDF를 찾을 수 없습니다 — 다시 올려주세요")
+        raise HTTPException(404, "Storage에 PDF가 없습니다")
+    if not data.startswith(b"%PDF") or store.report_id(data) != rid:
+        store.set_status(rid, "error", "올린 파일이 PDF가 아니거나 내용이 id와 다릅니다 — 다시 올려주세요")
+        raise HTTPException(400, "PDF가 아니거나 내용 해시가 id와 다릅니다")
+    (store.rdir(rid) / store.PDF_NAME).write_bytes(data)  # 파서가 읽을 로컬 사본 (Storage에는 이미 있음)
+    store.set_status(rid, "queued", "대기 중", filename=body.filename or None)
+    process(rid)
+    return store.read(rid, "status")
 
 
 @app.get("/api/reports", response_model=list[ReportSummary], tags=["reports"])
@@ -86,7 +139,7 @@ def list_reports():
     out = []
     for rid, docs in store.iter_docs("status", "record"):
         rec = docs["record"] or {}
-        st = docs["status"] or {}
+        st = heal(rid, docs["status"]) or {}
         out.append(ReportSummary(
             id=rid, status=st, title=rec.get("title") or st.get("filename", rid),
             report_no=rec.get("report_no", ""), accident_type=rec.get("accident_type", ""),
@@ -97,7 +150,7 @@ def list_reports():
 
 @app.get("/api/reports/{rid}", response_model=ReportDetail, tags=["reports"])
 def get_report(rid: str):
-    return ReportDetail(status=_need(rid, "status"), record=store.read(rid, "record"))
+    return ReportDetail(status=heal(rid, _need(rid, "status")), record=store.read(rid, "record"))
 
 
 @app.get("/api/reports/{rid}/pdf", tags=["reports"], response_class=FileResponse)
@@ -156,7 +209,10 @@ def update_scenario(rid: str, body: Scenario):
 def regenerate(rid: str, bg: BackgroundTasks):
     _need(rid, "record")
     store.set_status(rid, "queued", "시나리오 다시 생성 대기 중")
-    bg.add_task(process, rid, True)
+    if in_request():  # 서버리스: 요청 안에서 끝낸다 (화면은 응답을 기다리지 않고 상태를 폴링)
+        process(rid, True)
+    else:
+        bg.add_task(process, rid, True)
     return Ok()
 
 

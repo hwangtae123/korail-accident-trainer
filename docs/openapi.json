@@ -92,6 +92,123 @@
         }
       }
     },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Config",
+        "description": "화면이 업로드 방식을 고른다. Supabase를 쓰면 PDF를 Storage에 직접 올린다 (서버리스 함수의 요청 크기 제한을 피함).",
+        "operationId": "config_api_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/upload-url": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Upload Url",
+        "description": "직접 업로드 1단계: 같은 파일이 이미 있으면 new=false. 아니면 Storage에 PUT할 1회용 주소를 준다.\n다음: 그 주소로 PDF를 PUT -> POST /api/reports/{id}/process.",
+        "operationId": "upload_url_api_reports_upload_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{rid}/process": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Process Uploaded",
+        "description": "직접 업로드 2단계: Storage에 올라간 PDF를 확인(PDF인지, 내용 해시가 id와 같은지)하고 끝까지 처리한다.\n서버리스에서는 이 요청 안에서 처리한다 (1~2분). 화면은 이 응답을 기다리지 않고 GET /api/reports/{id}로 진행을 본다.",
+        "operationId": "process_uploaded_api_reports__rid__process_post",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/{rid}": {
       "get": {
         "tags": [
@@ -719,6 +836,26 @@
         ],
         "title": "AccidentRecord"
       },
+      "AppConfig": {
+        "properties": {
+          "direct_upload": {
+            "type": "boolean",
+            "title": "Direct Upload",
+            "description": "true면 PDF를 Supabase Storage에 직접 올린다 (upload-url -> PUT -> process). false면 POST /api/reports (multipart)"
+          },
+          "max_upload_mb": {
+            "type": "integer",
+            "title": "Max Upload Mb",
+            "description": "올릴 수 있는 PDF 최대 크기 (MB)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "direct_upload",
+          "max_upload_mb"
+        ],
+        "title": "AppConfig"
+      },
       "AskResult": {
         "properties": {
           "answer": {
@@ -947,6 +1084,18 @@
           "text"
         ],
         "title": "Option"
+      },
+      "ProcessRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Filename",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "ProcessRequest"
       },
       "Query": {
         "properties": {
@@ -1432,6 +1581,58 @@
           "new"
         ],
         "title": "UploadResult"
+      },
+      "UploadUrlRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{10}$",
+            "title": "Id",
+            "description": "PDF 내용 SHA-1 앞 10자리 (서버가 처리 전에 다시 계산해 확인)"
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Filename",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "UploadUrlRequest"
+      },
+      "UploadUrlResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "new": {
+            "type": "boolean",
+            "title": "New",
+            "description": "false면 같은 파일이 이미 있어서 올리지도 처리하지도 않는다"
+          },
+          "upload_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Url",
+            "description": "new일 때만: 이 주소로 PDF를 PUT (Content-Type: application/pdf)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "new"
+        ],
+        "title": "UploadUrlResult"
       },
       "ValidationError": {
         "properties": {
