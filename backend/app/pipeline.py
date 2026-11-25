@@ -5,6 +5,7 @@ from . import search, store
 from .extract import build_scenario, extract_record
 from .parse import NeedsOCR, ParsedReport, parse_report
 from .schema import AccidentRecord
+from .verify import verify_evidence
 
 
 def process(rid: str, only_scenario: bool = False) -> None:
@@ -19,14 +20,14 @@ def process(rid: str, only_scenario: bool = False) -> None:
             store.write(rid, "parsed", {"pages": parsed.pages, "sections": parsed.sections})
 
             store.set_status(rid, "extracting", "사고 정보 구조화 중 (LLM)")
-            record = extract_record(parsed)
+            record = verify_evidence(extract_record(parsed), parsed.pages)  # BE-1: 근거를 원문과 대조
             store.write(rid, "record", record.model_dump())
 
             store.set_status(rid, "indexing", "유사사고 검색용 색인 중 (ChromaDB)")
             search.index_report(rid)
 
         store.set_status(rid, "scenario", "판단 훈련 시나리오 생성 중 (LLM)")
-        scenario = build_scenario(parsed, record)
+        scenario = verify_evidence(build_scenario(parsed, record), parsed.pages)
         store.write(rid, "scenario", scenario.model_dump())
         store.set_status(rid, "done", f"섹션 {len(parsed.sections)}개 인식, 시나리오 {len(scenario.steps)}단계")
     except NeedsOCR as e:
