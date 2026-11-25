@@ -1,13 +1,26 @@
-# 배포: Supabase + 백엔드 컨테이너 + Vercel(화면)
+# 배포
+
+## 지금 방식: Vercel 프로젝트 하나 + Supabase (https://korail-accident-trainer.vercel.app)
 
 | 무엇 | 어디 | 내용 |
 |---|---|---|
-| 데이터 | **Supabase** | DB(PostgreSQL), 검색 벡터(pgvector), 원문 PDF(Storage) |
-| 백엔드 | **Docker 컨테이너 1개** (Render, Railway, Fly.io, Cloud Run 등) | FastAPI + 레이아웃 파서. Supabase는 Python 서버를 돌리지 못한다. 메모리 1GB 이상 권장 (파서가 보고서 1건에 20~70초) |
-| 화면 | **Vercel** | React 빌드(`frontend/`). 백엔드 주소를 `VITE_API_BASE`로 받아 직접 부른다 |
+| 화면 | Vercel 정적 파일 | `frontend/` 빌드 (`vercel.json`의 buildCommand) |
+| API | Vercel Python 함수 `api/index.py` (최대 300초) | `backend/app`의 FastAPI 앱 + 레이아웃 파서(`parser/`, 서브프로세스) |
+| 데이터 | Supabase | DB(`reports`), 검색 벡터(pgvector `report_chunks`), 원문 PDF(Storage `reports` 버킷) |
 
-화면이 백엔드를 직접 부르는 이유: Vercel의 `/api` 프록시(rewrite)를 거치면 PDF 업로드(건당 3~6MB 이상) 크기 제한이
-문서로 확인되지 않고, 처리 대기 시간 제한(120초)도 걸린다. 대신 백엔드에서 CORS로 Vercel 주소를 허용한다.
+서버리스라서 달라지는 점
+- **업로드**: 함수는 약 4.5MB가 넘는 요청을 받지 못한다(158건 중 51건이 넘음, 최대 32MB). 화면이 PDF의 SHA-1로 id를 만들고
+  `POST /api/reports/upload-url`로 받은 서명 주소에 PDF를 직접 PUT한 뒤 `POST /api/reports/{id}/process`를 부른다.
+  서버는 Storage에서 PDF를 다시 받아 PDF인지, 내용 해시가 id와 같은지 확인한 뒤 처리한다.
+- **처리**: `PROCESS_IN_REQUEST=1`(api/index.py)이면 처리 요청 안에서 끝까지 한다 (보고서 1건 약 1~2분).
+  화면은 그 응답을 기다리지 않고 3초마다 상태를 본다. 함수가 시간 제한으로 죽어 '처리 중'에 330초 넘게 머문 건은 읽을 때 `error`로 바뀐다.
+- 쓸 수 있는 디스크는 `/tmp`뿐이라 `DATA_DIR=/tmp/accident-trainer` (PDF 사본·파서 작업 폴더, 지워져도 됨).
+
+배포: 저장소 루트에서 `vercel deploy --prod` (CLI 로그인·`vercel link` 필요).
+Vercel 환경변수(Production): `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`(이상 Sensitive),
+`LLM_PROVIDER`, `LLM_MODEL`, `EMBED_PROVIDER`, `EMBED_MODEL`. `VITE_API_BASE`·`CORS_*`는 같은 주소라 필요 없다.
+
+아래 2~4번(Docker 컨테이너 + 화면 따로)은 Vercel 대신 서버를 직접 돌릴 때의 방법이다.
 
 ## 1. Supabase 프로젝트
 1. 프로젝트를 만들고 대시보드에서 세 값을 복사해 `accident-trainer/.env`에 넣는다 (채팅·깃에 올리지 않음)
