@@ -1,11 +1,10 @@
 // 왼쪽 영역 (FE-1): PDF 올리기, 유사사고 검색 입력, 보고서 목록, 메뉴.
 import { useState } from "react";
-import { api, type ReportSummary } from "../api/client";
-import { call, type Load } from "../api/call";
+import type { ReportSummary } from "../api/client";
+import type { Load } from "../api/call";
 import { go, href, type Route } from "../route";
+import { useUpload } from "../useUpload";
 import { Empty, ErrorBox, fmtTime, Loading, StatusTag } from "./common";
-
-type UploadNote = { name: string; text: string; kind: "ok" | "warn" | "bad"; id?: string };
 
 export default function Sidebar({ route, reports, onUploaded, onRetry }: {
   route: Route;
@@ -13,37 +12,8 @@ export default function Sidebar({ route, reports, onUploaded, onRetry }: {
   onUploaded: () => void;
   onRetry: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState<UploadNote[]>([]);
+  const { busy, notes, upload } = useUpload(onUploaded);
   const [q, setQ] = useState(route.name === "search" ? route.q : "");
-
-  async function upload(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setBusy(true);
-    const out: UploadNote[] = [];
-    for (const f of Array.from(files)) {
-      if (!f.name.toLowerCase().endsWith(".pdf")) {
-        out.push({ name: f.name, text: "PDF 파일이 아님 — 건너뜀", kind: "bad" });
-        continue;
-      }
-      const r = await call(api.POST("/api/reports", {
-        body: { file: f as unknown as string },
-        bodySerializer: () => {
-          const fd = new FormData();
-          fd.append("file", f);
-          return fd;
-        },
-      }));
-      if (!r.ok) out.push({ name: f.name, text: r.message, kind: "bad" });
-      else if (r.data.new) out.push({ name: f.name, text: "접수됨 — 처리 시작", kind: "ok", id: r.data.id });
-      else out.push({ name: f.name, text: "이미 있는 보고서입니다 — 기존 결과를 엽니다", kind: "warn", id: r.data.id });
-    }
-    setNotes(out);
-    setBusy(false);
-    onUploaded();
-    const first = out.find((n) => n.id);
-    if (first?.id) go(href.report(first.id));
-  }
 
   const activeId = route.name === "report" ? route.id : null;
 
@@ -75,13 +45,6 @@ export default function Sidebar({ route, reports, onUploaded, onRetry }: {
             placeholder="예: 야간 선로 작업 중 인접선 열차 진입" />
           <button className="btn primary" disabled={!q.trim()}>검색</button>
         </form>
-      </div>
-
-      <div className="card">
-        <nav className="menu">
-          <a className={route.name === "stats" ? "on" : ""} href={href.stats()}>반복 패턴</a>
-          <a className={route.name === "briefing" ? "on" : ""} href={href.briefing()}>작업 전 브리핑</a>
-        </nav>
       </div>
 
       <div className="card">
