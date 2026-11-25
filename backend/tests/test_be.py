@@ -171,3 +171,40 @@ def test_briefing_checklist_sources():
     assert "테스트 권고를 이행할 것" in seen[0] and "테스트 기여요인" in seen[0]
     assert "테스트 경위" not in seen[0]
     assert client.post("/api/briefing", json={"work": ""}).status_code == 422
+
+
+# ---------- BE-4 규정 이름 맞추기 ----------
+
+def test_rule_name_variants_are_same():
+    from app.rule_aliases import canonical_key
+
+    same = ["선로유지관리지침", "선로 유지관리 지침", "「선로유지관리지침」", "한국철도공사 선로유지관리지침",
+            "선로유지관리지침 제12조", "(한국철도공사) 선로유지관리지침 제12조제1항"]
+    assert len({canonical_key(x) for x in same}) == 1, {x: canonical_key(x) for x in same}
+    assert canonical_key("철도안전법 제40조의2") == canonical_key("철도안전법")
+    assert canonical_key("차량운전규칙") == canonical_key("철도차량운전규칙")
+    assert canonical_key("철도안전법") != canonical_key("철도안전법 시행규칙")
+    assert canonical_key("운전취급규정") != canonical_key("선로유지관리지침")
+
+
+def test_shared_rules_with_different_spelling():
+    names = {"A": "선로유지관리지침", "B": "한국철도공사 선로 유지관리 지침 제12조"}
+
+    def stub(system, user):
+        out = fake_llm(system, user)
+        if "구조화하는 분석가" in system:
+            rec = json.loads(out)
+            tag = rec["title"][-1]
+            rec["violated_rules"] = [{"rule_name": names[tag], "description": "테스트",
+                                      "evidence": {"page": 4, "quote": "테스트"}}]
+            return json.dumps(rec, ensure_ascii=False)
+        return out
+
+    client = _client(stub)
+    a = _upload(client, "A")
+    b = _upload(client, "B")
+    rel = client.get(f"/api/reports/{b}/related").json()
+    assert [g["report_id"] for g in rel] == [a]
+    assert rel[0]["shared_rules"] == [names["B"]]  # 이번 보고서의 표기로 보여준다
+    stats = client.get("/api/stats").json()
+    assert len(stats["violated_rules"]) == 1 and stats["violated_rules"][0]["count"] == 2

@@ -17,6 +17,7 @@ import re
 from collections import defaultdict
 
 from . import store
+from .rule_aliases import canonical_key
 
 COLLECTION = "accidents"
 CHUNK = 700
@@ -173,7 +174,8 @@ def search(query: str, n_reports: int = 5, hits_per_report: int = 4, exclude: st
 # ---------- 새 보고서 -> 과거 사고 연결 ----------
 
 def _norm_rule(name: str) -> str:
-    return re.sub(r"[\s「」『』()（）\[\]<>《》\"'·]", "", name)
+    """표기만 다른 같은 규정을 같은 키로 (app/rule_aliases.py, BE-4)."""
+    return canonical_key(name)
 
 
 def record_query(record: dict) -> str:

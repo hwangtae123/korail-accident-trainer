@@ -18,6 +18,7 @@ from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Qu
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
                          UploadResult)
 from .pipeline import ingest_bytes, mark_interrupted, process
+from .rule_aliases import canonical_key
 from .schema import Scenario
 from .verify import verify_evidence
 
@@ -162,6 +163,7 @@ def mark_reviewed(rid: str):
 def stats():
     """여러 보고서에 걸친 반복 패턴: 사고유형, 지적된 규정, 교육 관련 지적."""
     types, rules, training = Counter(), Counter(), []
+    names: dict[str, Counter] = {}  # 규정 키 -> 실제 표기들 (가장 많이 쓴 표기를 이름으로 보여준다)
     n = 0
     for rid in store.list_ids():
         rec = store.read(rid, "record")
@@ -169,14 +171,16 @@ def stats():
             continue
         n += 1
         types[rec.get("accident_type", "기타")] += 1
-        for r in rec.get("violated_rules", []):
-            rules[r["rule_name"].strip()] += 1
+        for key, name in {canonical_key(r["rule_name"]): r["rule_name"].strip()
+                          for r in rec.get("violated_rules", [])}.items():  # 한 보고서에서 같은 규정은 1번
+            rules[key] += 1
+            names.setdefault(key, Counter())[name] += 1
         for t in rec.get("training_findings", []):
             training.append(TrainingFinding(report_id=rid, report=rec.get("title", rid), text=t["text"]))
     return Stats(
         reports=n,
         accident_types=[NameCount(name=k, count=v) for k, v in types.most_common()],
-        violated_rules=[NameCount(name=k, count=v) for k, v in rules.most_common(20)],
+        violated_rules=[NameCount(name=names[k].most_common(1)[0][0], count=v) for k, v in rules.most_common(20)],
         training_findings=training,
     )
 
