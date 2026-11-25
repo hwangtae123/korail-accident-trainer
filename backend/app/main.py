@@ -12,6 +12,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from . import briefing as briefing_mod
 from . import search, store, watch
 from .api_models import (AskResult, Briefing, BriefingRequest, NameCount, Ok, Query, RelatedGroup,
                          ReindexResult, ReportDetail, ReportSummary, SearchGroup, Stats, TrainingFinding,
@@ -194,8 +195,9 @@ def ask(body: Query):
 
 @app.post("/api/briefing", response_model=Briefing, tags=["analysis"])
 def briefing(body: BriefingRequest):
-    """[backlog BE-3] 작업 전 안전 브리핑(TBM) 1장: 비슷한 과거 사고 + 권고 기반 확인 항목."""
-    raise HTTPException(501, "아직 구현 전 (docs/backlog.md BE-3)")
+    """작업 전 안전 브리핑(TBM) 1장: 비슷한 과거 사고 3건 + 그 안전권고·기여요인에서 뽑은 확인 항목.
+    확인 항목의 출처는 검색된 보고서로 코드가 검증한다. 색인된 보고서가 없으면 빈 결과."""
+    return briefing_mod.build(body.work)
 
 
 @app.post("/api/reindex", response_model=ReindexResult, tags=["system"])

@@ -118,3 +118,56 @@ def test_put_scenario():
     assert client.get(f"/api/reports/{rid}/scenario").json()["steps"][0]["answer_id"] == "C"  # 저장 안 됨
 
     assert client.put("/api/reports/nope000000/scenario", json=sc).status_code == 404
+
+
+# ---------- BE-3 작업 전 브리핑 API ----------
+
+def _briefing_stub(seen_user: list):
+    def stub(system, user):
+        if "안전 브리핑(TBM)" in system:
+            seen_user.append(user)
+            rid = __import__("re").search(r"R1: .*?\(id: (\w+)", user).group(1)
+            return json.dumps({
+                "summary": "테스트 요약 [테스트용 가상 보고서 p.4]",
+                "checklist": [
+                    {"text": "테스트 권고를 확인했는가?", "source_item": "R1-1", "source_report_id": rid},
+                    {"text": "출처 번호가 없는 항목", "source_item": "R9-9", "source_report_id": rid},
+                    {"text": "검색 안 된 보고서", "source_item": "R1-1", "source_report_id": "not-searched"},
+                ],
+            }, ensure_ascii=False)
+        out = fake_llm(system, user)
+        if "구조화하는 분석가" in system:
+            rec = json.loads(out)
+            rec["recommendations"] = [{"target": "한국철도공사", "text": "테스트 권고를 이행할 것",
+                                       "evidence": {"page": 5, "quote": "테스트 권고"}}]
+            rec["contributing_factors"] = [{"text": "테스트 기여요인", "evidence": {"page": 4, "quote": "기여요인"}}]
+            return json.dumps(rec, ensure_ascii=False)
+        return out
+    return stub
+
+
+def test_briefing_empty_when_no_reports():
+    client = _client(fake_llm)
+    res = client.post("/api/briefing", json={"work": "야간 선로 작업"})
+    assert res.status_code == 200, res.text
+    assert res.json() == {"work": "야간 선로 작업", "summary": "", "checklist": [], "similar": []}
+
+
+def test_briefing_checklist_sources():
+    seen = []
+    client = _client(_briefing_stub(seen))
+    ids = {_upload(client, "A"), _upload(client, "B")}
+    res = client.post("/api/briefing", json={"work": "테스트 직접 원인 작업"})
+    assert res.status_code == 200, res.text
+    b = res.json()
+    assert b["summary"].startswith("테스트 요약")
+    assert {g["report_id"] for g in b["similar"]} == ids
+    # 출처를 확인할 수 없는 두 항목은 버리고, 남은 항목은 원래 권고의 evidence를 그대로 쓴다
+    assert len(b["checklist"]) == 1
+    item = b["checklist"][0]
+    assert item["source_report_id"] in ids and item["source_title"].startswith("테스트용 가상 보고서")
+    assert item["evidence"]["page"] == 5 and item["evidence"]["quote"] == "테스트 권고"
+    # LLM에는 안전권고·기여요인만 들어간다 (본문 조각이나 경위는 넣지 않음)
+    assert "테스트 권고를 이행할 것" in seen[0] and "테스트 기여요인" in seen[0]
+    assert "테스트 경위" not in seen[0]
+    assert client.post("/api/briefing", json={"work": ""}).status_code == 422
